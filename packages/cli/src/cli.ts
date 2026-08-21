@@ -12,6 +12,9 @@ import { runWatch } from "./watch";
 import { runSearch, formatSearchResults } from "./search";
 import { runPr } from "./pr";
 import { runPublish } from "./publish";
+import { runList, formatListResult } from "./list";
+import { runPrStatus, formatPrStatus } from "./pr-status";
+import { runCleanup, formatCleanup } from "./cleanup";
 
 const HELP = `fh (forkhub) — keep up-to-date upstream + your custom patches
 
@@ -31,6 +34,10 @@ Usage:
   fh update [--tag <tag>] [--dry-run]    Update to latest (or specified) tag
   fh rollback                            Roll back to the previous tag
   fh status                              Show current state
+  fh list [--target <repo>]              List all intent-patches on this machine (global)
+  fh patches                             Alias for 'fh list'
+  fh pr-status [patch-id] [--target <repo>]  Check upstream PR/issue status (uses gh)
+  fh cleanup [--apply] [--dry-run] [--target <repo>]  Auto-remove upstreamed patches, switch to official release
   fh --help                              Show this help
 
 Producer commands run from inside your fork's checkout.
@@ -327,6 +334,43 @@ async function main() {
         } else {
           console.log(`Nothing to publish. Latest commit: ${result.commitSha}`);
         }
+        break;
+      }
+
+      case "list":
+      case "patches": {
+        const listOpts: { targetRepo?: string } = {};
+        if (typeof opts.target === "string") listOpts.targetRepo = opts.target;
+        const result = await runList(listOpts);
+        // filter if target given
+        if (listOpts.targetRepo) {
+          result.repos = result.repos.filter((r) => r.targetRepo === listOpts.targetRepo);
+          result.total = result.repos.reduce((acc, r) => acc + r.patches.length, 0);
+        }
+        console.log(formatListResult(result));
+        break;
+      }
+
+      case "pr-status": {
+        const prOpts: { patchId?: string; targetRepo?: string } = {};
+        if (positional[0]) prOpts.patchId = positional[0];
+        if (typeof opts.target === "string") prOpts.targetRepo = opts.target;
+        // also support --patch-id flag
+        if (typeof opts["patch-id"] === "string") prOpts.patchId = opts["patch-id"];
+        const result = await runPrStatus(prOpts);
+        console.log(formatPrStatus(result));
+        break;
+      }
+
+      case "cleanup": {
+        const cleanOpts: { apply?: boolean; dryRun?: boolean; targetRepo?: string } = {};
+        if (opts.apply === true) cleanOpts.apply = true;
+        if (opts["dry-run"] === true) cleanOpts.dryRun = true;
+        if (typeof opts.target === "string") cleanOpts.targetRepo = opts.target;
+        // default dry-run if not --apply
+        if (!cleanOpts.apply) cleanOpts.dryRun = true;
+        const result = await runCleanup(cleanOpts);
+        console.log(formatCleanup(result, cleanOpts));
         break;
       }
 
