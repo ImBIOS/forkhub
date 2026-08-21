@@ -1,71 +1,44 @@
 {
-  "name": "relay-patch",
-  "version": "0.2.10",
-  "description": "Keep up-to-date upstream + your custom patches. Patches are intent, not diffs.",
-  "module": "src/cli.ts",
+  "name": "relay-patch-monorepo",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "type": "module",
-  "bin": {
-    "relay-patch": "./bin/relay-patch.js"
-  },
-  "files": [
-    "bin",
-    "src",
-    "index.ts",
-    "README.md",
-    "LICENSE",
-    "CHANGELOG.md",
-    "Dockerfile",
-    "test-orchestrator.sh",
-    ".opencode"
-  ],
-  "engines": {
-    "bun": ">=1.3.0"
-  },
   "scripts": {
-    "build:binaries": "bash scripts/build-binaries.sh",
-    "start": "bun run src/cli.ts",
-    "init": "bun run src/cli.ts init",
-    "draft": "bun run src/cli.ts draft",
-    "satisfied": "bun run src/cli.ts satisfied",
-    "import": "bun run src/cli.ts import",
-    "search": "bun run src/cli.ts search",
-    "re-derive": "bun run src/cli.ts re-derive",
-    "apply": "bun run src/cli.ts apply",
-    "drift-check": "bun run src/cli.ts drift-check",
-    "watch": "bun run src/cli.ts watch",
-    "update": "bun run src/cli.ts update",
-    "rollback": "bun run src/cli.ts rollback",
-    "status": "bun run src/cli.ts status",
-    "prepublishOnly": "tsc --noEmit"
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "check-types": "turbo run check-types",
+    "dev:web": "turbo run dev -F web",
+    "dev:server": "turbo run dev -F server",
+    "db:push": "turbo run db:push -F @relay-patch/db",
+    "db:studio": "turbo run db:studio -F @relay-patch/db",
+    "db:generate": "turbo run db:generate -F @relay-patch/db",
+    "db:migrate": "turbo run db:migrate -F @relay-patch/db",
+    "db:start": "docker compose up -d postgres",
+    "db:watch": "docker compose up postgres",
+    "db:stop": "docker compose stop postgres",
+    "db:down": "docker compose down postgres",
+    "docker:build": "docker compose build",
+    "docker:up": "docker compose up -d --build",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f",
+    "check": "oxlint && oxfmt --write"
   },
-  "keywords": [
-    "git",
-    "fork",
-    "patch",
-    "ai",
-    "opencode",
-    "intent",
-    "upstream",
-    "rebase",
-    "merge"
-  ],
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/ImBIOS/relay-patch.git"
-  },
-  "bugs": {
-    "url": "https://github.com/ImBIOS/relay-patch/issues"
-  },
-  "homepage": "https://github.com/ImBIOS/relay-patch#readme",
-  "publishConfig": {
-    "provenance": true,
-    "access": "public"
+  "dependencies": {
+    "@relay-patch/env": "workspace:*",
+    "dotenv": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@relay-patch/config": "workspace:*",
+    "@types/bun": "catalog:",
+    "lefthook": "^2.1.9",
+    "oxfmt": "^0.57.0",
+    "oxlint": "^1.72.0",
+    "turbo": "^2.10.2",
+    "typescript": "catalog:"
   },
-  "peerDependencies": {
-    "typescript": "^5"
-  }
+  "packageManager": "pnpm@11.12.0"
 }

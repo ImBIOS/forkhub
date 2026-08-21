@@ -1,0 +1,31 @@
+// Better-T-Stack
+//
+// Website: https://www.better-t-stack.dev/
+// Stack Builder: https://www.better-t-stack.dev/new
+// Analytics: https://www.better-t-stack.dev/analytics
+// Showcase: https://www.better-t-stack.dev/showcase
+// Sponsor: https://github.com/sponsors/AmanVarshney01
+//
+// Add new addons with: pnpm dlx create-better-t-stack add
+// This file is safe to delete
+
+{
+  "$schema": "https://r2.better-t-stack.dev/schema.json",
+  "version": "3.36.5",
+  "createdAt": "2026-07-21T03:59:30.049Z",
+  "reproducibleCommand": "pnpm create better-t-stack@latest relay-patch --frontend next --backend elysia --runtime bun --database postgres --orm drizzle --api orpc --auth none --payments none --addons turborepo oxlint lefthook fumadocs evlog skills mcp --examples todo --db-setup docker --web-deploy docker --server-deploy docker --no-git --package-manager pnpm --no-install",
+  "database": "postgres",
+  "orm": "drizzle",
+  "backend": "elysia",
+  "runtime": "bun",
+  "frontend": ["next"],
+  "addons": ["turborepo", "oxlint", "lefthook", "fumadocs", "evlog", "skills", "mcp"],
+  "examples": ["todo"],
+  "auth": "none",
+  "payments": "none",
+  "packageManager": "pnpm",
+  "dbSetup": "docker",
+  "api": "orpc",
+  "webDeploy": "docker",
+  "serverDeploy": "docker",
+}
