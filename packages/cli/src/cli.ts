@@ -13,25 +13,25 @@ import { runSearch, formatSearchResults } from "./search";
 import { runPr } from "./pr";
 import { runPublish } from "./publish";
 
-const HELP = `forkhub — keep up-to-date upstream + your custom patches
+const HELP = `fh (forkhub) — keep up-to-date upstream + your custom patches
 
 Usage:
-  forkhub init [--target <repo>]              Set up .forkhub repo
-  forkhub draft "<intent>"                    Create a draft branch for a new patch
-  forkhub satisfied [--skip-port]             Finalize intent, port to forkhub/main
-  forkhub pr [--draft] [--base <branch>]      Push current branch + open PR to upstream
-  forkhub publish [--message <msg>]           Push .forkhub repo to your public GitHub repo
-  forkhub import <url> [--force]              Import a patch from another user's .forkhub
-  forkhub search [query] [--target <repo>]    Search GitHub for patches
-  forkhub re-derive <patch-id> [--force]      Generate re-derivation context bundle
-  forkhub apply <bundle-path>                 Apply realization from context bundle
-  forkhub drift-check                         Check if patches need re-derivation
-  forkhub watch [--once] [--interval <sec>] [--agent <name>]
-                                                  Daemon: auto-detect drift + generate bundles
-  forkhub update [--tag <tag>] [--dry-run]    Update to latest (or specified) tag
-  forkhub rollback                            Roll back to the previous tag
-  forkhub status                              Show current state
-  forkhub --help                              Show this help
+  fh init [--target <repo>]              Set up .forkhub repo
+  fh draft "<intent>"                    Create a draft branch for a new patch
+  fh satisfied [--skip-port]             Finalize intent, port to forkhub/main
+  fh pr [--draft] [--base <branch>]      Push current branch + open PR to upstream
+  fh publish [--message <msg>]           Push .forkhub repo to your public GitHub repo
+  fh import <url> [--force]              Import a patch from another user's .forkhub
+  fh search [query] [--target <repo>]    Search GitHub for patches
+  fh re-derive <patch-id> [--force]      Generate re-derivation context bundle
+  fh apply <bundle-path>                 Apply realization from context bundle
+  fh drift-check                         Check if patches need re-derivation
+  fh watch [--once] [--interval <sec>] [--agent <name>]
+                                         Daemon: auto-detect drift + generate bundles
+  fh update [--tag <tag>] [--dry-run]    Update to latest (or specified) tag
+  fh rollback                            Roll back to the previous tag
+  fh status                              Show current state
+  fh --help                              Show this help
 
 Producer commands run from inside your fork's checkout.
 Consumer commands (update, rollback, status) also run from the fork checkout.
@@ -75,7 +75,7 @@ async function runStatus() {
   if (latest) {
     console.log(`Latest:   ${latest.name} ${latest.sha.slice(0, 7)}`);
     if (latest.sha !== sha) {
-      console.log(`\nRun \`forkhub update\` to advance.`);
+      console.log(`\nRun \`fh update\` to advance.`);
     } else {
       console.log(`\nAlready at latest.`);
     }
@@ -117,7 +117,7 @@ async function main() {
       case "draft": {
         const intent = positional.join(" ");
         if (!intent) {
-          throw new Error("Intent description required. Usage: forkhub draft \"<intent>\"");
+          throw new Error("Intent description required. Usage: fh draft \"<intent>\"");
         }
         const result = await runDraft(intent);
         console.log(`Branch:    ${result.branch}`);
@@ -125,7 +125,7 @@ async function main() {
         console.log(`Base:      ${result.baseSha.slice(0, 7)}`);
         console.log(`Draft:     ${result.draftFile}`);
         console.log(`\nImplement your patch on branch '${result.branch}'.`);
-        console.log(`When done, run: forkhub satisfied`);
+        console.log(`When done, run: fh satisfied`);
         break;
       }
 
@@ -225,7 +225,7 @@ async function main() {
       case "import": {
         const source = positional.join(" ");
         if (!source) {
-          throw new Error("Source URL required. Usage: forkhub import <github-url>");
+          throw new Error("Source URL required. Usage: fh import <github-url>");
         }
         const importOpts: { force?: boolean } = {};
         if (opts.force === true) importOpts.force = true;
@@ -235,14 +235,14 @@ async function main() {
         console.log(`Target repo:  ${result.targetRepo}`);
         console.log(`Author:       ${result.author}`);
         console.log(`Files:        ${result.filesImported.join(", ")}`);
-        console.log(`\nPatch imported. Run \`forkhub drift-check\` to see if re-derivation is needed.`);
+        console.log(`\nPatch imported. Run \`fh drift-check\` to see if re-derivation is needed.`);
         break;
       }
 
       case "re-derive": {
         const patchId = positional[0];
         if (!patchId) {
-          throw new Error("Patch ID required. Usage: forkhub re-derive <patch-id>");
+          throw new Error("Patch ID required. Usage: fh re-derive <patch-id>");
         }
         const reDeriveOpts: { force?: boolean } = {};
         if (opts.force === true) reDeriveOpts.force = true;
@@ -262,14 +262,14 @@ async function main() {
         }
         console.log(`\nNext steps:`);
         console.log(`  1. Have an AI agent re-derive the patch and save to REALIZATION/realization.diff`);
-        console.log(`  2. Run: forkhub apply ${result.bundlePath}`);
+        console.log(`  2. Run: fh apply ${result.bundlePath}`);
         break;
       }
 
       case "apply": {
         const bundlePath = positional[0];
         if (!bundlePath) {
-          throw new Error("Bundle path required. Usage: forkhub apply <bundle-path>");
+          throw new Error("Bundle path required. Usage: fh apply <bundle-path>");
         }
         const applyOpts: { skipTests?: boolean; skipTag?: boolean } = {};
         if (opts["skip-tests"] === true) applyOpts.skipTests = true;
@@ -323,7 +323,7 @@ async function main() {
           console.log(`Files:     ${result.filesStaged} staged`);
           console.log(`Message:   ${result.commitMessage}`);
           console.log(`\nPatch intents published. Other users can import via:`);
-          console.log(`  forkhub import https://github.com/<user>/.forkhub/...`);
+          console.log(`  fh import https://github.com/<user>/.forkhub/...`);
         } else {
           console.log(`Nothing to publish. Latest commit: ${result.commitSha}`);
         }
