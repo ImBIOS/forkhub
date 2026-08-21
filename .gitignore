@@ -53,3 +53,8 @@ coverage
 .cache
 tmp
 temp
+
+# Local overrides
+_local/
+*.local.*
+*.local
