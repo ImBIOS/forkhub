@@ -8,12 +8,12 @@
     "start": "next start"
   },
   "dependencies": {
-    "@orpc/client": "catalog:",
-    "@orpc/server": "catalog:",
-    "@orpc/tanstack-query": "^1.14.6",
     "@forkhub/api": "workspace:*",
     "@forkhub/env": "workspace:*",
     "@forkhub/ui": "workspace:*",
+    "@orpc/client": "catalog:",
+    "@orpc/server": "catalog:",
+    "@orpc/tanstack-query": "^1.14.6",
     "@swc/helpers": "^0.5.23",
     "@tanstack/react-query": "^5.101.2",
     "babel-plugin-react-compiler": "^1.0.0",

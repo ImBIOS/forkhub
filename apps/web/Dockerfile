@@ -1,7 +1,9 @@
 FROM node:24-slim AS builder
-RUN npm install -g pnpm@11.10.0
+RUN npm install -g pnpm@11.22.0
 WORKDIR /app
 ENV SKIP_ENV_VALIDATION=1
+ENV DATABASE_URL=postgresql://dummy:dummy@localhost:5432/dummy
+ENV CORS_ORIGIN=https://example.com
 
 COPY . .
 RUN --mount=type=cache,target=/pnpm-store pnpm install --store-dir /pnpm-store
