@@ -1,6 +1,6 @@
 FROM node:24-slim AS base
 COPY --from=oven/bun:1 /usr/local/bin/bun /usr/local/bin/bun
-RUN npm install -g pnpm@11
+RUN npm install -g pnpm@11.10.0
 WORKDIR /app
 ENV SKIP_ENV_VALIDATION=1
 
