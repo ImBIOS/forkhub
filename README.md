@@ -16,6 +16,29 @@ This project was created with [Better-T-Stack](https://github.com/AmanVarshney01
 - **Turborepo** - Optimized monorepo build system
 - **Oxlint** - Oxlint + Oxfmt (linting & formatting)
 
+
+## Install (Canary)
+
+We haven't published to npm yet. Try the canary:
+
+```bash
+# pnpm (recommended)
+pnpm add -g "github:ImBIOS/forkhub#canary&path:packages/cli"
+fh --help
+
+# or via dlx without global install
+pnpm dlx "github:ImBIOS/forkhub#canary&path:packages/cli" fh --help
+bunx --bun "github:ImBIOS/forkhub#canary&path:packages/cli" fh --help
+
+# alternative: degit + local
+npx degit ImBIOS/forkhub#canary forkhub-canary && cd forkhub-canary && pnpm install && pnpm --filter forkhub exec fh --help
+```
+
+Web (browse repos, fork with intent system):
+- prod: https://forkhub.imbios.dev
+- canary: https://canary.forkhub.imbios.dev
+- api: https://api.forkhub.imbios.dev
+
 ## Getting Started
 
 First, install the dependencies:
