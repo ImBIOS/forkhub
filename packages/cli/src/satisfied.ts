@@ -16,7 +16,7 @@ import { slugify, generateULID8 } from "./patch-id";
 import type { InitOptions } from "./init";
 
 export type SatisfiedOptions = {
-  relayPatchDir?: string;
+  forkhubDir?: string;
   targetRepo?: string;
   skipPort?: boolean;
 };
@@ -25,11 +25,11 @@ export type SatisfiedResult = {
   patchId: string;
   branch: string;
   filesChanged: string[];
-  relayPatchMainUpdated: boolean;
+  forkhubMainUpdated: boolean;
   tag: string | null;
 };
 
-const DRAFT_FILE = ".relay-patch-draft.md";
+const DRAFT_FILE = ".forkhub-draft.md";
 
 function parseDraft(content: string): { slug: string; intent: string; baseSha: string } {
   const slugMatch = content.match(/^slug:\s*(.+)$/m);
@@ -49,9 +49,9 @@ function parseDraft(content: string): { slug: string; intent: string; baseSha: s
   };
 }
 
-async function findTargetRepo(relayPatchDir: string, forkCwd: string): Promise<string> {
-  if (existsSync(join(relayPatchDir, "repos"))) {
-    const reposDir = join(relayPatchDir, "repos");
+async function findTargetRepo(forkhubDir: string, forkCwd: string): Promise<string> {
+  if (existsSync(join(forkhubDir, "repos"))) {
+    const reposDir = join(forkhubDir, "repos");
     // Try to match by upstream remote URL
     const { getRemoteUrl, listRemotes } = await import("./git");
     for (const remote of await listRemotes(forkCwd)) {
@@ -85,7 +85,7 @@ async function findTargetRepo(relayPatchDir: string, forkCwd: string): Promise<s
       }
     }
   }
-  throw new Error("Could not determine target repo. Run `relay-patch init` first.");
+  throw new Error("Could not determine target repo. Run `forkhub init` first.");
 }
 
 export async function runSatisfied(options: SatisfiedOptions = {}): Promise<SatisfiedResult> {
@@ -93,18 +93,18 @@ export async function runSatisfied(options: SatisfiedOptions = {}): Promise<Sati
     throw new Error("Not a git repository. Run from inside your fork's checkout.");
   }
 
-  const relayPatchDir = options.relayPatchDir ?? join(process.cwd(), "..", ".relay-patch");
-  if (!existsSync(relayPatchDir)) {
-    throw new Error(".relay-patch repo not found. Run `relay-patch init` first.");
+  const forkhubDir = options.forkhubDir ?? join(process.cwd(), "..", ".forkhub");
+  if (!existsSync(forkhubDir)) {
+    throw new Error(".forkhub repo not found. Run `forkhub init` first.");
   }
 
   const draftPath = join(process.cwd(), DRAFT_FILE);
   if (!existsSync(draftPath)) {
-    throw new Error("No draft file found. Run `relay-patch draft \"<intent>\"` first.");
+    throw new Error("No draft file found. Run `forkhub draft \"<intent>\"` first.");
   }
 
   const branch = await currentBranch();
-  if (branch === "main" || branch === "master" || branch === "relay-patch/main") {
+  if (branch === "main" || branch === "master" || branch === "forkhub/main") {
     throw new Error(`On branch '${branch}'. Switch to your draft branch first.`);
   }
 
@@ -112,10 +112,10 @@ export async function runSatisfied(options: SatisfiedOptions = {}): Promise<Sati
   const { slug, intent } = parseDraft(draftContent);
   const patchId = `${slug}-${generateULID8()}`;
 
-  const targetRepo = options.targetRepo ?? (await findTargetRepo(relayPatchDir, process.cwd()));
-  const repoDir = join(relayPatchDir, "repos", targetRepo);
+  const targetRepo = options.targetRepo ?? (await findTargetRepo(forkhubDir, process.cwd()));
+  const repoDir = join(forkhubDir, "repos", targetRepo);
   if (!existsSync(repoDir)) {
-    throw new Error(`Target repo directory not found: ${repoDir}. Run \`relay-patch init\` first.`);
+    throw new Error(`Target repo directory not found: ${repoDir}. Run \`forkhub init\` first.`);
   }
 
   const patchDir = join(repoDir, "patches", patchId);
@@ -131,7 +131,7 @@ export async function runSatisfied(options: SatisfiedOptions = {}): Promise<Sati
     "HEAD",
     process.cwd(),
     ":(exclude).gitignore",
-    ":(exclude).relay-patch-draft.md",
+    ":(exclude).forkhub-draft.md",
   );
 
   const username = await gitOrThrow(["config", "user.name"]).catch(() => "unknown");
@@ -234,29 +234,29 @@ bun test
   manifest.apply_order.push(patchId);
   await Bun.write(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
 
-  let relayPatchMainUpdated = false;
+  let forkhubMainUpdated = false;
   let tag: string | null = null;
 
   if (!options.skipPort) {
-    const rpBranchResult = await gitExec(["rev-parse", "--verify", "relay-patch/main"]);
-    if (rpBranchResult.exitCode !== 0) {
-      await gitOrThrow(["branch", "relay-patch/main", upstreamSha]);
+    const fhBranchResult = await gitExec(["rev-parse", "--verify", "forkhub/main"]);
+    if (fhBranchResult.exitCode !== 0) {
+      await gitOrThrow(["branch", "forkhub/main", upstreamSha]);
     }
-    await checkout("relay-patch/main");
+    await checkout("forkhub/main");
     try {
       await cherryPick(branch);
-      relayPatchMainUpdated = true;
+      forkhubMainUpdated = true;
 
       const upstreamTagResult = await gitExec(["describe", "--tags", "--abbrev=0", upstreamSha]);
       const upstreamTag = upstreamTagResult.exitCode === 0 ? upstreamTagResult.stdout : "v0.0.0";
 
-      const rpTagsResult = await gitExec(["tag", "--list", `${upstreamTag}-rp*`]);
-      const rpCount = rpTagsResult.stdout ? rpTagsResult.stdout.split("\n").length : 0;
-      tag = `${upstreamTag}-rp${rpCount + 1}`;
+      const fhTagsResult = await gitExec(["tag", "--list", `${upstreamTag}-fh*`]);
+      const fhCount = fhTagsResult.stdout ? fhTagsResult.stdout.split("\n").length : 0;
+      tag = `${upstreamTag}-fh${fhCount + 1}`;
       await gitOrThrow(["tag", tag]);
     } catch (err) {
       await gitExec(["cherry-pick", "--abort"]);
-      throw new Error(`Cherry-pick failed (sibling conflict?). Patch saved to .relay-patch but NOT ported to relay-patch/main. Use --skip-port to save without porting. Error: ${err instanceof Error ? err.message : err}`);
+      throw new Error(`Cherry-pick failed (sibling conflict?). Patch saved to .forkhub but NOT ported to forkhub/main. Use --skip-port to save without porting. Error: ${err instanceof Error ? err.message : err}`);
     }
 
     await checkout(branch);
@@ -268,7 +268,7 @@ bun test
     patchId,
     branch,
     filesChanged,
-    relayPatchMainUpdated,
+    forkhubMainUpdated,
     tag,
   };
 }

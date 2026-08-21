@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "relay-patch",
-  description: "relay-patch",
+  title: "forkhub",
+  description: "forkhub",
 };
 
 export default function RootLayout({

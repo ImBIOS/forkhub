@@ -1,12 +1,12 @@
 "use client";
 
-import { Button } from "@relay-patch/ui/components/button";
+import { Button } from "@forkhub/ui/components/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@relay-patch/ui/components/dropdown-menu";
+} from "@forkhub/ui/components/dropdown-menu";
 import { Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import * as React from "react";

@@ -1,9 +1,9 @@
 "use client";
 
-import { Button } from "@relay-patch/ui/components/button";
-import { Input } from "@relay-patch/ui/components/input";
-import { Textarea } from "@relay-patch/ui/components/textarea";
-import { cn } from "@relay-patch/ui/lib/utils";
+import { Button } from "@forkhub/ui/components/button";
+import { Input } from "@forkhub/ui/components/input";
+import { Textarea } from "@forkhub/ui/components/textarea";
+import { cn } from "@forkhub/ui/lib/utils";
 import { cva, type VariantProps } from "class-variance-authority";
 import * as React from "react";
 

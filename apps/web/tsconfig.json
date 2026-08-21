@@ -21,7 +21,7 @@
     ],
     "paths": {
       "@/*": ["./src/*"],
-      "@relay-patch/ui/*": ["../../packages/ui/src/*"]
+      "@forkhub/ui/*": ["../../packages/ui/src/*"]
     }
   },
   "include": [

@@ -1,7 +1,7 @@
 "use client";
 
-import { Button } from "@relay-patch/ui/components/button";
-import { cn } from "@relay-patch/ui/lib/utils";
+import { Button } from "@forkhub/ui/components/button";
+import { cn } from "@forkhub/ui/lib/utils";
 import {
   MessageScroller as MessageScrollerPrimitive,
   useMessageScroller,

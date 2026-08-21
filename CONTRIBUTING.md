@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for your interest in relay-patch!
+Thanks for your interest in forkhub!
 
 ## Development setup
 
@@ -16,8 +16,8 @@ bun run src/cli.ts status  # smoke test
 bunx tsc --noEmit
 
 # Docker orchestrator test (isolated)
-docker build -t relay-patch-test .
-docker run --rm relay-patch-test
+docker build -t forkhub-test .
+docker run --rm forkhub-test
 ```
 
 ## Architecture
@@ -80,10 +80,10 @@ git push origin v0.2.3
 For provenance to work from CI, you need to set up **npm trusted publishing**:
 
 1. First publish manually once: `npm login` then `npm publish --provenance`
-2. Go to https://www.npmjs.com/package/relay-patch → Settings → Trusted publishing
+2. Go to https://www.npmjs.com/package/forkhub → Settings → Trusted publishing
 3. Add a trusted publisher:
    - Provider: GitHub Actions
-   - Repository: `ImBIOS/relay-patch`
+   - Repository: `ImBIOS/forkhub`
    - Workflow filename: `publish.yml`
 4. Future releases will publish from CI with provenance automatically
 

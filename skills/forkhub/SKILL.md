@@ -1,4 +1,4 @@
-# relay-patch
+# forkhub
 
 ## Description
 
@@ -6,23 +6,23 @@ Manage patches for forked repositories using intent-based re-derivation. Use whe
 
 ## When to Use
 
-- User says `/relay-patch "<intent>"` — create a new patch (DRAFTING)
-- User says `/relay-patch` (no args) — process pending re-derivation bundle
+- User says `/forkhub "<intent>"` — create a new patch (DRAFTING)
+- User says `/forkhub` (no args) — process pending re-derivation bundle
 - User says they're satisfied with a patch — finalize it
 - User wants to check if patches need re-derivation — drift-check
 - User wants to re-derive patches against new upstream
 
-## DRAFTING Flow (`/relay-patch "<intent>"`)
+## DRAFTING Flow (`/forkhub "<intent>"`)
 
-When the user invokes `/relay-patch "<intent description>"`:
+When the user invokes `/forkhub "<intent description>"`:
 
 ### Step 1: Create draft
 
 ```bash
-bun run <relay-patch-cli> draft "<intent>"
+bun run <forkhub-cli> draft "<intent>"
 ```
 
-This creates a `*` branch and a `.relay-patch-draft.md` file.
+This creates a `*` branch and a `.forkhub-draft.md` file.
 
 ### Step 2: Read and understand
 
@@ -38,7 +38,7 @@ Implement the feature/fix described in the intent. Rules:
 
 ### Step 4: Fill INTENT.md sections
 
-Edit `.relay-patch-draft.md` to fill in the template sections:
+Edit `.forkhub-draft.md` to fill in the template sections:
 
 **## Why** — Why does the user want this? Why won't the maintainer merge it?
 
@@ -62,30 +62,47 @@ Ask if they're satisfied.
 If the user says they're satisfied:
 
 ```bash
-bun run <relay-patch-cli> satisfied
+bun run <forkhub-cli> satisfied
 ```
 
-This finalizes the intent, captures the diff, ports to `relay-patch/main`, and tags.
+This finalizes the intent, captures the diff, ports to `forkhub/main`, and tags.
+
+### Step 6c: Open PR upstream (fork workflows only)
+
+If the user wants to also contribute the patch back to the original repo (the
+fork workflow), and the local clone is set up as a fork with separate
+`upstream` and `origin` remotes:
+
+```bash
+bun run <forkhub-cli> pr --draft
+```
+
+This pushes the current branch to `origin` (your fork) and opens a draft PR
+against `upstream` via `gh pr create`. The PR URL and number are saved into
+the manifest under `patches[<patch-id>].applied_upstream_pr`.
+
+Skip this step if the user doesn't want to contribute upstream, or if the
+local repo isn't a fork (single-remote setup).
 
 ### Step 6b: Not satisfied
 
 If the user wants changes:
 - Make the requested changes
-- Update the Implementation notes in `.relay-patch-draft.md`
+- Update the Implementation notes in `.forkhub-draft.md`
 - Re-test
 - Ask again
 
-## RE-DERIVATION Flow (`/relay-patch` with no args)
+## RE-DERIVATION Flow (`/forkhub` with no args)
 
-When the user invokes `/relay-patch` with no arguments, check for pending
-re-derivation bundles. The `relay-patch watch` daemon generates these bundles
+When the user invokes `/forkhub` with no arguments, check for pending
+re-derivation bundles. The `forkhub watch` daemon generates these bundles
 when patches drift. Your job is to implement the patch and save the result.
 
 ### Step 1: Find the latest pending bundle
 
 ```bash
 # Find the most recent pending bundle
-LATEST_BUNDLE=$(find ../.relay-patch/derive -type d -mindepth 2 -maxdepth 2 2>/dev/null | sort | tail -1)
+LATEST_BUNDLE=$(find ../.forkhub/derive -type d -mindepth 2 -maxdepth 2 2>/dev/null | sort | tail -1)
 
 # Check if it already has a realization (watch would have applied it)
 if [ -f "$LATEST_BUNDLE/REALIZATION/realization.diff" ]; then
@@ -191,23 +208,24 @@ Good intent: "add --hint flag that shows narrowed range (guess+1 to max, or min 
 
 ## CLI Location
 
-The relay-patch CLI is at the project root:
+The forkhub CLI is at the project root:
 ```
 bun run src/cli.ts <command>
 ```
 
 Or if installed globally:
 ```
-relay-patch <command>
+forkhub <command>
 ```
 
 ## Commands Reference
 
 | Command | Purpose |
 |---|---|
-| `init [--target <repo>]` | Set up .relay-patch repo |
+| `init [--target <repo>]` | Set up .forkhub repo (auto-detects fork vs single-remote) |
 | `draft "<intent>"` | Create draft branch |
 | `satisfied [--skip-port]` | Finalize intent, port, tag |
+| `pr [--draft] [--base <branch>]` | Push current branch to fork + open PR to upstream (fork only) |
 | `status` | Show current tag state |
 | `update [--tag <tag>]` | Consumer: advance to tag |
 | `rollback` | Consumer: roll back |

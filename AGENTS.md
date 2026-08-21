@@ -1,4 +1,4 @@
-# `relay-patch` AI Guidelines
+# `forkhub` AI Guidelines
 
 ## Bun & PNPM
 

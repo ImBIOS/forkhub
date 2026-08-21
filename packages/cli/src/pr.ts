@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { isGitRepo, gitExec, gitOrThrow, currentBranch, getRemoteUrl, listRemotes } from "./git";
 
 export type PrOptions = {
-  relayPatchDir?: string;
+  forkhubDir?: string;
   targetRepo?: string;
   title?: string;
   body?: string;
@@ -20,9 +20,9 @@ export type PrResult = {
   error: string | null;
 };
 
-async function findTargetRepo(relayPatchDir: string, forkCwd: string): Promise<string> {
-  if (existsSync(join(relayPatchDir, "repos"))) {
-    const reposDir = join(relayPatchDir, "repos");
+async function findTargetRepo(forkhubDir: string, forkCwd: string): Promise<string> {
+  if (existsSync(join(forkhubDir, "repos"))) {
+    const reposDir = join(forkhubDir, "repos");
     for (const remote of await listRemotes(forkCwd)) {
       const url = await getRemoteUrl(remote, forkCwd);
       if (!url) continue;
@@ -52,13 +52,13 @@ async function findTargetRepo(relayPatchDir: string, forkCwd: string): Promise<s
       }
     }
   }
-  throw new Error("Could not determine target repo. Run `relay-patch init` first.");
+  throw new Error("Could not determine target repo. Run `forkhub init` first.");
 }
 
-async function loadManifest(relayPatchDir: string, targetRepo: string): Promise<any> {
-  const manifestPath = join(relayPatchDir, "repos", targetRepo, "manifest.json");
+async function loadManifest(forkhubDir: string, targetRepo: string): Promise<any> {
+  const manifestPath = join(forkhubDir, "repos", targetRepo, "manifest.json");
   if (!existsSync(manifestPath)) {
-    throw new Error(`Manifest not found at ${manifestPath}. Run \`relay-patch init\` first.`);
+    throw new Error(`Manifest not found at ${manifestPath}. Run \`forkhub init\` first.`);
   }
   return JSON.parse(readFileSync(manifestPath, "utf8"));
 }
@@ -76,8 +76,8 @@ async function runGh(args: string[]): Promise<{ stdout: string; stderr: string; 
   return { stdout: stdout.trim(), stderr: stderr.trim(), exitCode };
 }
 
-function saveManifest(relayPatchDir: string, targetRepo: string, manifest: any): void {
-  const manifestPath = join(relayPatchDir, "repos", targetRepo, "manifest.json");
+function saveManifest(forkhubDir: string, targetRepo: string, manifest: any): void {
+  const manifestPath = join(forkhubDir, "repos", targetRepo, "manifest.json");
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
 }
 
@@ -86,26 +86,26 @@ export async function runPr(options: PrOptions = {}): Promise<PrResult> {
     throw new Error("Not a git repository. Run from inside your fork's checkout.");
   }
 
-  const relayPatchDir = options.relayPatchDir ?? join(process.cwd(), "..", ".relay-patch");
-  if (!existsSync(relayPatchDir)) {
-    throw new Error(".relay-patch repo not found. Run `relay-patch init` first.");
+  const forkhubDir = options.forkhubDir ?? join(process.cwd(), "..", ".forkhub");
+  if (!existsSync(forkhubDir)) {
+    throw new Error(".forkhub repo not found. Run `forkhub init` first.");
   }
 
-  const targetRepo = options.targetRepo ?? (await findTargetRepo(relayPatchDir, process.cwd()));
-  const repoDir = join(relayPatchDir, "repos", targetRepo);
+  const targetRepo = options.targetRepo ?? (await findTargetRepo(forkhubDir, process.cwd()));
+  const repoDir = join(forkhubDir, "repos", targetRepo);
 
-  const manifest = await loadManifest(relayPatchDir, targetRepo);
+  const manifest = await loadManifest(forkhubDir, targetRepo);
   if (!manifest.is_fork) {
     throw new Error(
-      "This repo isn't configured as a fork. `relay-patch pr` requires separate `upstream` and `origin` remotes.",
+      "This repo isn't configured as a fork. `forkhub pr` requires separate `upstream` and `origin` remotes.",
     );
   }
   if (!manifest.fork_remote) {
-    throw new Error("manifest.fork_remote is not set. Re-run `relay-patch init`.");
+    throw new Error("manifest.fork_remote is not set. Re-run `forkhub init`.");
   }
 
   const branch = await currentBranch();
-  if (branch === "main" || branch === "master" || branch === "relay-patch/main") {
+  if (branch === "main" || branch === "master" || branch === "forkhub/main") {
     throw new Error(`On branch '${branch}'. Switch to your draft branch first.`);
   }
 
@@ -140,13 +140,13 @@ export async function runPr(options: PrOptions = {}): Promise<PrResult> {
         const nonNegMatch = intentContent.match(/## Non-negotiables\s*\n([\s\S]*?)(?=\n## |\n---|\s*$)/);
         if (nonNegMatch && nonNegMatch[1]) sections.push(`## Non-negotiables\n\n${nonNegMatch[1].trim()}`);
         if (sections.length > 0) {
-          prBody = sections.join("\n\n") + "\n\n---\n\nManaged via [relay-patch](https://github.com/ImBIOS/relay-patch).";
+          prBody = sections.join("\n\n") + "\n\n---\n\nManaged via [forkhub](https://github.com/ImBIOS/forkhub).";
         }
       }
     }
   }
   if (!prTitle) prTitle = branch;
-  if (!prBody) prBody = "Managed via [relay-patch](https://github.com/ImBIOS/relay-patch).";
+  if (!prBody) prBody = "Managed via [forkhub](https://github.com/ImBIOS/forkhub).";
 
   const base = options.base ?? "main";
   const draftFlag = options.draft ? "--draft" : "";
@@ -193,7 +193,7 @@ export async function runPr(options: PrOptions = {}): Promise<PrResult> {
   }
 
   if (prNumber) {
-    const manifest2 = await loadManifest(relayPatchDir, targetRepo);
+    const manifest2 = await loadManifest(forkhubDir, targetRepo);
     let patchId: string | null = null;
     for (const [id, p] of Object.entries(manifest2.patches)) {
       if ((p as any).branch === branch) {
@@ -207,7 +207,7 @@ export async function runPr(options: PrOptions = {}): Promise<PrResult> {
         url: prUrl,
         state: "open",
       };
-      saveManifest(relayPatchDir, targetRepo, manifest2);
+      saveManifest(forkhubDir, targetRepo, manifest2);
     }
   }
 

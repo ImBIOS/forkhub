@@ -1,11 +1,11 @@
 {
-  "extends": "@relay-patch/config/tsconfig.base.json",
+  "extends": "@forkhub/config/tsconfig.base.json",
   "compilerOptions": {
     "jsx": "react-jsx",
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "types": [],
     "paths": {
-      "@relay-patch/ui/*": ["./src/*"]
+      "@forkhub/ui/*": ["./src/*"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],

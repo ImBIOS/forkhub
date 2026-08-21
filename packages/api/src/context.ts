@@ -1,7 +1,5 @@
-import type { Context as ElysiaContext } from "elysia";
-
 export type CreateContextOptions = {
-  context: ElysiaContext;
+  context: unknown;
 };
 
 export async function createContext(_options: CreateContextOptions) {

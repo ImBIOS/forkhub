@@ -73,8 +73,8 @@ export async function runSearch(options: SearchOptions = {}): Promise<SearchResu
   throw new Error(
     "Search requires --author <username> or --target <github.com/owner/repo>.\n" +
     "GitHub code search API requires authentication for unfiltered queries.\n" +
-    "Example: relay-patch search --author alice\n" +
-    "         relay-patch search --target github.com/owner/repo",
+    "Example: forkhub search --author alice\n" +
+    "         forkhub search --target github.com/owner/repo",
   );
 }
 
@@ -82,7 +82,7 @@ async function searchByAuthor(author: string, options: SearchOptions): Promise<S
   const limit = options.limit ?? 20;
   const candidates: Array<{ user: string; repo: string; branch: string; path: string; url: string }> = [];
 
-  const dotRepoUrl = `https://api.github.com/repos/${author}/.relay-patch/git/trees/main?recursive=1`;
+  const dotRepoUrl = `https://api.github.com/repos/${author}/.forkhub/git/trees/main?recursive=1`;
   try {
     const tree: any = await githubApi(dotRepoUrl);
     if (tree.truncated || !tree.tree) {
@@ -92,26 +92,26 @@ async function searchByAuthor(author: string, options: SearchOptions): Promise<S
       if (entry.type === "blob" && entry.path.includes("/patches/") && entry.path.endsWith("/INTENT.md")) {
         candidates.push({
           user: author,
-          repo: ".relay-patch",
+          repo: ".forkhub",
           branch: "main",
           path: entry.path,
-          url: `https://github.com/${author}/.relay-patch/blob/main/${entry.path}`,
+          url: `https://github.com/${author}/.forkhub/blob/main/${entry.path}`,
         });
       }
     }
   } catch {
     const reposData: any = await githubApi(`/users/${author}/repos?per_page=100`);
-    for (const r of reposData.filter((r: any) => r.name === ".relay-patch")) {
+    for (const r of reposData.filter((r: any) => r.name === ".forkhub")) {
       try {
-        const tree: any = await githubApi(`/repos/${author}/.relay-patch/git/trees/${r.default_branch}?recursive=1`);
+        const tree: any = await githubApi(`/repos/${author}/.forkhub/git/trees/${r.default_branch}?recursive=1`);
         for (const entry of tree.tree) {
           if (entry.type === "blob" && entry.path.includes("/patches/") && entry.path.endsWith("/INTENT.md")) {
             candidates.push({
               user: author,
-              repo: ".relay-patch",
+              repo: ".forkhub",
               branch: r.default_branch,
               path: entry.path,
-              url: `https://github.com/${author}/.relay-patch/blob/${r.default_branch}/${entry.path}`,
+              url: `https://github.com/${author}/.forkhub/blob/${r.default_branch}/${entry.path}`,
             });
           }
         }
@@ -125,7 +125,7 @@ async function searchByAuthor(author: string, options: SearchOptions): Promise<S
 async function searchByTargetRepo(targetRepo: string, options: SearchOptions): Promise<SearchResult[]> {
   const limit = options.limit ?? 20;
   const dotRepoSearch: any = await githubApi(
-    `/search/repositories?q=${encodeURIComponent(targetRepo + " in:name .relay-patch")}&per_page=20`,
+    `/search/repositories?q=${encodeURIComponent(targetRepo + " in:name .forkhub")}&per_page=20`,
   );
   const candidates: Array<{ user: string; repo: string; branch: string; path: string; url: string }> = [];
   for (const r of dotRepoSearch.items ?? []) {
@@ -179,7 +179,7 @@ export function formatSearchResults(results: SearchResult[]): string {
     lines.push(`    title:      ${r.title}`);
     lines.push(`    author:     ${r.user}`);
     if (r.targetRepo) lines.push(`    target:     ${r.targetRepo}`);
-    lines.push(`    import:     relay-patch import ${r.url}`);
+    lines.push(`    import:     forkhub import ${r.url}`);
     lines.push("");
   }
   return lines.join("\n");

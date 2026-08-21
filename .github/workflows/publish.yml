@@ -29,18 +29,17 @@ jobs:
 
       - name: Typecheck
         run: pnpm exec tsc --noEmit
-
-      - name: Build
-        run: echo "no build step (PNPM runs TypeScript directly)"
+        working-directory: packages/cli
 
       - name: Publish to npm (trusted publisher, OIDC)
         run: npm publish --access public --provenance=true
+        working-directory: packages/cli
         env:
           NPM_CONFIG_PROVENANCE: true
 
   # NOTE: GitHub Packages requires scoped packages (@scope/name).
-  # relay-patch is unscoped on npm; GitHub Packages is intentionally skipped.
-  # To enable: scope package as @imbios/relay-patch and add a publish-github job.
+  # forkhub is unscoped on npm; GitHub Packages is intentionally skipped.
+  # To enable: scope package as @imbios/forkhub and add a publish-github job.
 
   build-binaries:
     needs: [publish-npm]
@@ -50,34 +49,35 @@ jobs:
         include:
           - target: bun-linux-x64
             os: ubuntu-24.04
-            artifact: relay-patch-linux-x64
+            artifact: forkhub-linux-x64
           - target: bun-linux-arm64
             os: ubuntu-24.04-arm
-            artifact: relay-patch-linux-arm64
+            artifact: forkhub-linux-arm64
           - target: bun-darwin-x64
             os: macos-15-intel
-            artifact: relay-patch-darwin-x64
+            artifact: forkhub-darwin-x64
           - target: bun-darwin-arm64
             os: macos-14
-            artifact: relay-patch-darwin-arm64
+            artifact: forkhub-darwin-arm64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-      - run: bun install --frozen-lockfile
       - run: bunx tsc --noEmit
+        working-directory: packages/cli
       - name: Build binary
         run: |
           mkdir -p dist
           bun build --compile --target=${{ matrix.target }} --minify \
             --outfile=dist/${{ matrix.artifact }} ./src/cli.ts
+        working-directory: packages/cli
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact }}
-          path: dist/${{ matrix.artifact }}
+          path: packages/cli/dist/*
           if-no-files-found: error
 
   attach-binaries:
@@ -91,15 +91,15 @@ jobs:
           path: dist
           merge-multiple: true
       - name: Compute SHA256SUMS
-        run: (cd dist && sha256sum relay-patch-* > SHA256SUMS)
+        run: (cd dist && sha256sum forkhub-* > SHA256SUMS)
       - name: Attach binaries to release
         uses: softprops/action-gh-release@v3
         with:
           files: |
-            dist/relay-patch-linux-x64
-            dist/relay-patch-linux-arm64
-            dist/relay-patch-darwin-x64
-            dist/relay-patch-darwin-arm64
+            dist/forkhub-linux-x64
+            dist/forkhub-linux-arm64
+            dist/forkhub-darwin-x64
+            dist/forkhub-darwin-arm64
             dist/SHA256SUMS
 
   update-homebrew-formula:
@@ -120,11 +120,11 @@ jobs:
       - name: Compute SHA256 for all platforms
         id: sha
         run: |
-          echo "darwin_arm64=$(sha256sum dist/relay-patch-darwin-arm64 | awk '{print $1}')" >> "$GITHUB_OUTPUT"
-          echo "darwin_x64=$(sha256sum dist/relay-patch-darwin-x64 | awk '{print $1}')" >> "$GITHUB_OUTPUT"
-          echo "linux_x64=$(sha256sum dist/relay-patch-linux-x64 | awk '{print $1}')" >> "$GITHUB_OUTPUT"
-          echo "linux_arm64=$(sha256sum dist/relay-patch-linux-arm64 | awk '{print $1}')" >> "$GITHUB_OUTPUT"
-      - name: Update Formula/relay-patch.rb in this repo
+          echo "darwin_arm64=$(sha256sum dist/forkhub-darwin-arm64 | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          echo "darwin_x64=$(sha256sum dist/forkhub-darwin-x64 | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          echo "linux_x64=$(sha256sum dist/forkhub-linux-x64 | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          echo "linux_arm64=$(sha256sum dist/forkhub-linux-arm64 | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+      - name: Update Formula/forkhub.rb in this repo
         env:
           VERSION: ${{ github.ref_name }}
           DARWIN_ARM64: ${{ steps.sha.outputs.darwin_arm64 }}
@@ -133,34 +133,34 @@ jobs:
           LINUX_ARM64: ${{ steps.sha.outputs.linux_arm64 }}
         run: |
           mkdir -p Formula
-          cat > Formula/relay-patch.rb <<EOF
+          cat > Formula/forkhub.rb <<EOF
           # typed: false
           # frozen_string_literal: true
 
-          class RelayPatch < Formula
+          class Forkhub < Formula
             desc "Keep up-to-date upstream + your custom patches. Patches are intent, not diffs."
-            homepage "https://github.com/ImBIOS/relay-patch"
+            homepage "https://github.com/ImBIOS/forkhub"
             version "${VERSION#v}"
             license "MIT"
 
             on_macos do
               on_intel do
-                url "https://github.com/ImBIOS/relay-patch/releases/download/${VERSION}/relay-patch-darwin-x64"
+                url "https://github.com/ImBIOS/forkhub/releases/download/${VERSION}/forkhub-darwin-x64"
                 sha256 "${DARWIN_X64}"
               end
               on_arm do
-                url "https://github.com/ImBIOS/relay-patch/releases/download/${VERSION}/relay-patch-darwin-arm64"
+                url "https://github.com/ImBIOS/forkhub/releases/download/${VERSION}/forkhub-darwin-arm64"
                 sha256 "${DARWIN_ARM64}"
               end
             end
 
             on_linux do
               on_intel do
-                url "https://github.com/ImBIOS/relay-patch/releases/download/${VERSION}/relay-patch-linux-x64"
+                url "https://github.com/ImBIOS/forkhub/releases/download/${VERSION}/forkhub-linux-x64"
                 sha256 "${LINUX_X64}"
               end
               on_arm do
-                url "https://github.com/ImBIOS/relay-patch/releases/download/${VERSION}/relay-patch-linux-arm64"
+                url "https://github.com/ImBIOS/forkhub/releases/download/${VERSION}/forkhub-linux-arm64"
                 sha256 "${LINUX_ARM64}"
               end
             end
@@ -175,11 +175,11 @@ jobs:
               else
                 "linux-x64"
               end
-              bin.install "relay-patch-\#{os_arch}" => "relay-patch"
+              bin.install "forkhub-#{os_arch}" => "fh"
             end
 
             test do
-              assert_match "relay-patch", shell_output("#{bin}/relay-patch --help")
+              assert_match "forkhub", shell_output("#{bin}/fh --help")
             end
           end
           EOF
@@ -188,6 +188,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git checkout main
-          git add Formula/relay-patch.rb
+          git add Formula/forkhub.rb
           git commit -m "chore: update homebrew formula to ${VERSION}" || echo "No changes to commit"
           git push origin main

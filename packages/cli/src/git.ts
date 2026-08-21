@@ -82,7 +82,7 @@ export async function stashPop(cwd: string = process.cwd()): Promise<boolean> {
   return result.exitCode === 0;
 }
 
-export async function listTags(pattern = "v*-rp*", cwd: string = process.cwd()): Promise<{ name: string; sha: string }[]> {
+export async function listTags(pattern = "v*-fh*", cwd: string = process.cwd()): Promise<{ name: string; sha: string }[]> {
   const tagNames = await gitOrThrow(["tag", "--list", pattern, "--sort=-v:refname"], cwd);
   if (!tagNames) return [];
   const names = tagNames.split("\n").filter(Boolean);

@@ -64,7 +64,7 @@ export async function fetchTags(): Promise<void> {
   await gitOrThrow(["fetch", "--tags", "--quiet"]);
 }
 
-export async function listTags(pattern = "v*-rp*"): Promise<TagInfo[]> {
+export async function listTags(pattern = "v*-fh*"): Promise<TagInfo[]> {
   const tagNames = await gitOrThrow(["tag", "--list", pattern, "--sort=-v:refname"]);
   if (!tagNames) return [];
   const names = tagNames.split("\n").filter(Boolean);
@@ -109,7 +109,7 @@ export async function install(): Promise<void> {
 
 export async function runUpdate(options: UpdateOptions = {}): Promise<UpdateResult> {
   if (!(await isGitRepo())) {
-    throw new Error("Not a git repository. Run `relay-patch update` from inside your fork's checkout.");
+    throw new Error("Not a git repository. Run `forkhub update` from inside your fork's checkout.");
   }
 
   await fetchTags();
@@ -118,11 +118,11 @@ export async function runUpdate(options: UpdateOptions = {}): Promise<UpdateResu
   if (!targetTag) {
     const tags = await listTags();
     if (tags.length === 0) {
-      throw new Error("No relay-patch tags found (looking for v*-rp*). Run a re-derivation first.");
+      throw new Error("No forkhub tags found (looking for v*-fh*). Run a re-derivation first.");
     }
     const latest = tags[0];
     if (!latest) {
-      throw new Error("No relay-patch tags found (looking for v*-rp*). Run a re-derivation first.");
+      throw new Error("No forkhub tags found (looking for v*-fh*). Run a re-derivation first.");
     }
     targetTag = latest.name;
   }
@@ -138,7 +138,7 @@ export async function runUpdate(options: UpdateOptions = {}): Promise<UpdateResu
     return { from, to: targetTag, toSha: targetSha, stashed: false, stashRestored: false, skipped: false };
   }
 
-  const stashed = await stash("relay-patch: pre-update");
+  const stashed = await stash("forkhub: pre-update");
 
   try {
     await checkout(targetTag);

@@ -1,5 +1,5 @@
-import { db } from "@relay-patch/db";
-import { todo } from "@relay-patch/db/schema/todo";
+import { db } from "@forkhub/db";
+import { todo } from "@forkhub/db/schema/todo";
 import { eq } from "drizzle-orm";
 import z from "zod";
 

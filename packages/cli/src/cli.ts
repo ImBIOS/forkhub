@@ -13,25 +13,25 @@ import { runSearch, formatSearchResults } from "./search";
 import { runPr } from "./pr";
 import { runPublish } from "./publish";
 
-const HELP = `relay-patch — keep up-to-date upstream + your custom patches
+const HELP = `forkhub — keep up-to-date upstream + your custom patches
 
 Usage:
-  relay-patch init [--target <repo>]              Set up .relay-patch repo
-  relay-patch draft "<intent>"                    Create a draft branch for a new patch
-  relay-patch satisfied [--skip-port]             Finalize intent, port to relay-patch/main
-  relay-patch pr [--draft] [--base <branch>]      Push current branch + open PR to upstream
-  relay-patch publish [--message <msg>]           Push .relay-patch repo to your public GitHub repo
-  relay-patch import <url> [--force]              Import a patch from another user's .relay-patch
-  relay-patch search [query] [--target <repo>]    Search GitHub for patches
-  relay-patch re-derive <patch-id> [--force]      Generate re-derivation context bundle
-  relay-patch apply <bundle-path>                 Apply realization from context bundle
-  relay-patch drift-check                         Check if patches need re-derivation
-  relay-patch watch [--once] [--interval <sec>] [--agent <name>]
+  forkhub init [--target <repo>]              Set up .forkhub repo
+  forkhub draft "<intent>"                    Create a draft branch for a new patch
+  forkhub satisfied [--skip-port]             Finalize intent, port to forkhub/main
+  forkhub pr [--draft] [--base <branch>]      Push current branch + open PR to upstream
+  forkhub publish [--message <msg>]           Push .forkhub repo to your public GitHub repo
+  forkhub import <url> [--force]              Import a patch from another user's .forkhub
+  forkhub search [query] [--target <repo>]    Search GitHub for patches
+  forkhub re-derive <patch-id> [--force]      Generate re-derivation context bundle
+  forkhub apply <bundle-path>                 Apply realization from context bundle
+  forkhub drift-check                         Check if patches need re-derivation
+  forkhub watch [--once] [--interval <sec>] [--agent <name>]
                                                   Daemon: auto-detect drift + generate bundles
-  relay-patch update [--tag <tag>] [--dry-run]    Update to latest (or specified) tag
-  relay-patch rollback                            Roll back to the previous tag
-  relay-patch status                              Show current state
-  relay-patch --help                              Show this help
+  forkhub update [--tag <tag>] [--dry-run]    Update to latest (or specified) tag
+  forkhub rollback                            Roll back to the previous tag
+  forkhub status                              Show current state
+  forkhub --help                              Show this help
 
 Producer commands run from inside your fork's checkout.
 Consumer commands (update, rollback, status) also run from the fork checkout.
@@ -75,12 +75,12 @@ async function runStatus() {
   if (latest) {
     console.log(`Latest:   ${latest.name} ${latest.sha.slice(0, 7)}`);
     if (latest.sha !== sha) {
-      console.log(`\nRun \`relay-patch update\` to advance.`);
+      console.log(`\nRun \`forkhub update\` to advance.`);
     } else {
       console.log(`\nAlready at latest.`);
     }
   } else {
-    console.log(`\nNo relay-patch tags found.`);
+    console.log(`\nNo forkhub tags found.`);
   }
 }
 
@@ -109,15 +109,15 @@ async function main() {
         } else {
           console.log(`Setup:           SINGLE-REMOTE — no fork detected`);
         }
-        console.log(`.relay-patch:    ${result.relayPatchDir}`);
-        console.log(result.created ? "Created new .relay-patch repo." : "Existing .relay-patch repo configured.");
+        console.log(`.forkhub:    ${result.forkhubDir}`);
+        console.log(result.created ? "Created new .forkhub repo." : "Existing .forkhub repo configured.");
         break;
       }
 
       case "draft": {
         const intent = positional.join(" ");
         if (!intent) {
-          throw new Error("Intent description required. Usage: relay-patch draft \"<intent>\"");
+          throw new Error("Intent description required. Usage: forkhub draft \"<intent>\"");
         }
         const result = await runDraft(intent);
         console.log(`Branch:    ${result.branch}`);
@@ -125,7 +125,7 @@ async function main() {
         console.log(`Base:      ${result.baseSha.slice(0, 7)}`);
         console.log(`Draft:     ${result.draftFile}`);
         console.log(`\nImplement your patch on branch '${result.branch}'.`);
-        console.log(`When done, run: relay-patch satisfied`);
+        console.log(`When done, run: forkhub satisfied`);
         break;
       }
 
@@ -137,13 +137,13 @@ async function main() {
         console.log(`Patch ID:       ${result.patchId}`);
         console.log(`Branch:         ${result.branch}`);
         console.log(`Files changed:  ${result.filesChanged.join(", ") || "(none)"}`);
-        if (result.relayPatchMainUpdated) {
-          console.log(`Ported to:      relay-patch/main`);
+        if (result.forkhubMainUpdated) {
+          console.log(`Ported to:      forkhub/main`);
           if (result.tag) console.log(`Tag:            ${result.tag}`);
         } else {
           console.log(`Port:           skipped`);
         }
-        console.log(`\nIntent saved to .relay-patch.`);
+        console.log(`\nIntent saved to .forkhub.`);
         break;
       }
 
@@ -225,7 +225,7 @@ async function main() {
       case "import": {
         const source = positional.join(" ");
         if (!source) {
-          throw new Error("Source URL required. Usage: relay-patch import <github-url>");
+          throw new Error("Source URL required. Usage: forkhub import <github-url>");
         }
         const importOpts: { force?: boolean } = {};
         if (opts.force === true) importOpts.force = true;
@@ -235,14 +235,14 @@ async function main() {
         console.log(`Target repo:  ${result.targetRepo}`);
         console.log(`Author:       ${result.author}`);
         console.log(`Files:        ${result.filesImported.join(", ")}`);
-        console.log(`\nPatch imported. Run \`relay-patch drift-check\` to see if re-derivation is needed.`);
+        console.log(`\nPatch imported. Run \`forkhub drift-check\` to see if re-derivation is needed.`);
         break;
       }
 
       case "re-derive": {
         const patchId = positional[0];
         if (!patchId) {
-          throw new Error("Patch ID required. Usage: relay-patch re-derive <patch-id>");
+          throw new Error("Patch ID required. Usage: forkhub re-derive <patch-id>");
         }
         const reDeriveOpts: { force?: boolean } = {};
         if (opts.force === true) reDeriveOpts.force = true;
@@ -262,14 +262,14 @@ async function main() {
         }
         console.log(`\nNext steps:`);
         console.log(`  1. Have an AI agent re-derive the patch and save to REALIZATION/realization.diff`);
-        console.log(`  2. Run: relay-patch apply ${result.bundlePath}`);
+        console.log(`  2. Run: forkhub apply ${result.bundlePath}`);
         break;
       }
 
       case "apply": {
         const bundlePath = positional[0];
         if (!bundlePath) {
-          throw new Error("Bundle path required. Usage: relay-patch apply <bundle-path>");
+          throw new Error("Bundle path required. Usage: forkhub apply <bundle-path>");
         }
         const applyOpts: { skipTests?: boolean; skipTag?: boolean } = {};
         if (opts["skip-tests"] === true) applyOpts.skipTests = true;
@@ -323,7 +323,7 @@ async function main() {
           console.log(`Files:     ${result.filesStaged} staged`);
           console.log(`Message:   ${result.commitMessage}`);
           console.log(`\nPatch intents published. Other users can import via:`);
-          console.log(`  relay-patch import https://github.com/<user>/.relay-patch/...`);
+          console.log(`  forkhub import https://github.com/<user>/.forkhub/...`);
         } else {
           console.log(`Nothing to publish. Latest commit: ${result.commitSha}`);
         }

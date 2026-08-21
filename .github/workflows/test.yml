@@ -10,17 +10,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+      - uses: pnpm/action-setup@v6
         with:
-          bun-version: latest
-      - run: bun install --frozen-lockfile
-      - run: bunx tsc --noEmit
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck CLI
+        run: pnpm exec tsc --noEmit
+        working-directory: packages/cli
 
   docker-orchestrator:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Build and run orchestrator test
+        working-directory: packages/cli
         run: |
-          docker build -t relay-patch-test .
-          docker run --rm relay-patch-test | tail -20
+          docker build -t forkhub-test .
+          docker run --rm forkhub-test | tail -20

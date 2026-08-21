@@ -4,7 +4,7 @@ import { isGitRepo } from "./git";
 import { generateULID8 } from "./patch-id";
 
 export type ImportOptions = {
-  relayPatchDir?: string;
+  forkhubDir?: string;
   force?: boolean;
 };
 
@@ -78,7 +78,7 @@ async function fetchPatchFiles(
   branch: string,
   patchPath: string,
 ): Promise<{ intent: string; acceptance: string | null; reference: string | null; attempts: string | null }> {
-  const baseUrl = `https://raw.githubusercontent.com/${user}/.relay-patch/${branch}/${patchPath}`;
+  const baseUrl = `https://raw.githubusercontent.com/${user}/.forkhub/${branch}/${patchPath}`;
 
   const intent = await fetchRawFile(`${baseUrl}/INTENT.md`);
   if (!intent) {
@@ -97,9 +97,9 @@ export async function runImport(source: string, options: ImportOptions = {}): Pr
     throw new Error("Not a git repository. Run from inside your fork's checkout.");
   }
 
-  const relayPatchDir = options.relayPatchDir ?? join(process.cwd(), "..", ".relay-patch");
-  if (!existsSync(relayPatchDir)) {
-    throw new Error(".relay-patch repo not found. Run `relay-patch init` first.");
+  const forkhubDir = options.forkhubDir ?? join(process.cwd(), "..", ".forkhub");
+  if (!existsSync(forkhubDir)) {
+    throw new Error(".forkhub repo not found. Run `forkhub init` first.");
   }
 
   let parsed = parseImportSource(source);
@@ -111,7 +111,7 @@ export async function runImport(source: string, options: ImportOptions = {}): Pr
     throw new Error(
       `Shorthand @user/patch-id requires knowing the target repo.\n` +
       `Use the full URL:\n` +
-      `  relay-patch import https://github.com/${parsed.user}/.relay-patch/blob/main/repos/<host>/<owner>/<repo>/patches/<patch-id>/INTENT.md`,
+      `  forkhub import https://github.com/${parsed.user}/.forkhub/blob/main/repos/<host>/<owner>/<repo>/patches/<patch-id>/INTENT.md`,
     );
   } else {
     throw new Error(
@@ -134,7 +134,7 @@ export async function runImport(source: string, options: ImportOptions = {}): Pr
 
   const author = frontmatter.author ?? user;
 
-  const repoDir = join(relayPatchDir, "repos", targetRepo);
+  const repoDir = join(forkhubDir, "repos", targetRepo);
   if (!existsSync(repoDir)) {
     mkdirSync(repoDir, { recursive: true });
     await Bun.write(
@@ -168,7 +168,7 @@ export async function runImport(source: string, options: ImportOptions = {}): Pr
 
   const intentContent = intent.replace(
     /^(source_url:) null$/m,
-    `source_url: https://github.com/${user}/.relay-patch/blob/${branch}/${patchPath}/INTENT.md`,
+    `source_url: https://github.com/${user}/.forkhub/blob/${branch}/${patchPath}/INTENT.md`,
   ).replace(
     /^(imported_at:) null$/m,
     `imported_at: ${new Date().toISOString()}`,

@@ -1,5 +1,5 @@
 {
-  "name": "@relay-patch/db",
+  "name": "@forkhub/db",
   "type": "module",
   "exports": {
     ".": {
@@ -16,14 +16,14 @@
     "db:migrate": "drizzle-kit migrate"
   },
   "dependencies": {
-    "@relay-patch/env": "workspace:*",
+    "@forkhub/env": "workspace:*",
     "dotenv": "catalog:",
     "drizzle-orm": "catalog:",
     "pg": "^8.22.0",
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@relay-patch/config": "workspace:*",
+    "@forkhub/config": "workspace:*",
     "@types/pg": "catalog:",
     "drizzle-kit": "^0.31.10",
     "typescript": "catalog:"

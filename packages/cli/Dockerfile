@@ -1,4 +1,4 @@
-# Dockerfile for relay-patch orchestrator testing
+# Dockerfile for forkhub orchestrator testing
 # Runs the full re-derive → apply flow in isolation (no host contamination)
 
 FROM oven/bun:1.3.14-alpine

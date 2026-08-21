@@ -4,9 +4,9 @@ import { OpenAPIReferencePlugin } from "@orpc/openapi/plugins";
 import { onError } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/fetch";
 import { ZodToJsonSchemaConverter } from "@orpc/zod/zod4";
-import { createContext } from "@relay-patch/api/context";
-import { appRouter } from "@relay-patch/api/routers/index";
-import { env } from "@relay-patch/env/server";
+import { createContext } from "@forkhub/api/context";
+import { appRouter } from "@forkhub/api/routers/index";
+import { env } from "@forkhub/env/server";
 import { Elysia } from "elysia";
 import { initLogger } from "evlog";
 import { evlog } from "evlog/elysia";
@@ -32,7 +32,7 @@ const apiHandler = new OpenAPIHandler(appRouter, {
 });
 
 initLogger({
-  env: { service: "relay-patch-server" },
+  env: { service: "forkhub-server" },
 });
 
 new Elysia()

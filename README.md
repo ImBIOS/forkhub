@@ -1,4 +1,4 @@
-# relay-patch
+# forkhub
 
 This project was created with [Better-T-Stack](https://github.com/AmanVarshney01/create-better-t-stack), a modern TypeScript stack that combines Next.js, Elysia, ORPC, and more.
 
@@ -65,7 +65,7 @@ npx shadcn@latest add accordion dialog popover sheet table -c packages/ui
 Import shared components like this:
 
 ```tsx
-import { Button } from "@relay-patch/ui/components/button";
+import { Button } from "@forkhub/ui/components/button";
 ```
 
 ### Add app-specific blocks
@@ -94,7 +94,7 @@ For more details, see the guide on [Deploying with Docker Compose](https://www.b
 ## Project Structure
 
 ```
-relay-patch/
+forkhub/
 ├── apps/
 │   ├── web/         # Frontend application (Next.js)
 │   └── server/      # Backend API (Elysia, ORPC)

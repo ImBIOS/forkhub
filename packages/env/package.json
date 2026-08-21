@@ -1,5 +1,5 @@
 {
-  "name": "@relay-patch/env",
+  "name": "@forkhub/env",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -14,7 +14,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@relay-patch/config": "workspace:*",
+    "@forkhub/config": "workspace:*",
     "@types/bun": "catalog:",
     "typescript": "catalog:"
   }

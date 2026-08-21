@@ -4,7 +4,7 @@ import { isGitRepo, gitExec } from "./git";
 import { runDriftCheck, formatDriftCheckResult, type DriftCheckResult } from "./drift-check";
 
 export type WatchOptions = {
-  relayPatchDir?: string;
+  forkhubDir?: string;
   once?: boolean;
   interval?: number;
   agent?: string;
@@ -28,16 +28,16 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function loadWatchState(relayPatchDir: string): Promise<WatchState> {
-  const statePath = join(relayPatchDir, STATE_FILE);
+async function loadWatchState(forkhubDir: string): Promise<WatchState> {
+  const statePath = join(forkhubDir, STATE_FILE);
   if (!existsSync(statePath)) {
     return { lastCheck: "", bundles: [] };
   }
   return JSON.parse(readFileSync(statePath, "utf-8"));
 }
 
-async function saveWatchState(relayPatchDir: string, state: WatchState): Promise<void> {
-  const statePath = join(relayPatchDir, STATE_FILE);
+async function saveWatchState(forkhubDir: string, state: WatchState): Promise<void> {
+  const statePath = join(forkhubDir, STATE_FILE);
   await Bun.write(statePath, JSON.stringify(state, null, 2) + "\n");
 }
 
@@ -45,10 +45,10 @@ async function checkBundleComplete(bundlePath: string): Promise<boolean> {
   return existsSync(join(bundlePath, "REALIZATION", "realization.diff"));
 }
 
-async function applyBundle(bundlePath: string, relayPatchDir: string): Promise<{ success: boolean; tag: string | null; errors: string[] }> {
+async function applyBundle(bundlePath: string, forkhubDir: string): Promise<{ success: boolean; tag: string | null; errors: string[] }> {
   const { runApply } = await import("./apply");
   try {
-    const result = await runApply(bundlePath, { relayPatchDir, skipTests: false });
+    const result = await runApply(bundlePath, { forkhubDir, skipTests: false });
     return { success: result.diffApplied, tag: result.tag, errors: result.errors };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -119,9 +119,9 @@ export async function runWatch(options: WatchOptions = {}): Promise<void> {
     throw new Error("Not a git repository. Run from inside your fork's checkout.");
   }
 
-  const relayPatchDir = options.relayPatchDir ?? join(process.cwd(), "..", ".relay-patch");
-  if (!existsSync(relayPatchDir)) {
-    throw new Error(".relay-patch repo not found. Run `relay-patch init` first.");
+  const forkhubDir = options.forkhubDir ?? join(process.cwd(), "..", ".forkhub");
+  if (!existsSync(forkhubDir)) {
+    throw new Error(".forkhub repo not found. Run `forkhub init` first.");
   }
 
   const intervalMs = (options.interval ?? 300) * 1000;
@@ -132,13 +132,13 @@ export async function runWatch(options: WatchOptions = {}): Promise<void> {
     iteration++;
     const now = new Date();
     console.log(`\n${"=".repeat(60)}`);
-    console.log(`  relay-patch watch — iteration ${iteration} — ${now.toISOString()}`);
+    console.log(`  forkhub watch — iteration ${iteration} — ${now.toISOString()}`);
     console.log(`${"=".repeat(60)}\n`);
 
-    const driftResult = await runDriftCheck({ relayPatchDir });
+    const driftResult = await runDriftCheck({ forkhubDir });
     console.log(formatDriftCheckResult(driftResult));
 
-    const state = await loadWatchState(relayPatchDir);
+    const state = await loadWatchState(forkhubDir);
 
     const driftedPatches = driftResult.patches.filter((p) => p.status === "drifted");
 
@@ -156,7 +156,7 @@ export async function runWatch(options: WatchOptions = {}): Promise<void> {
 
         try {
           const { runReDerive } = await import("./re-derive");
-          const bundleResult = await runReDerive(patch.patchId, { relayPatchDir });
+          const bundleResult = await runReDerive(patch.patchId, { forkhubDir });
           if (bundleResult.status === "needs-derivation" && bundleResult.bundlePath) {
             state.bundles.push({
               patchId: patch.patchId,
@@ -191,7 +191,7 @@ export async function runWatch(options: WatchOptions = {}): Promise<void> {
         }
 
         console.log(`\n🔧 AI realization found for ${bundle.patchId}. Applying...`);
-        const applyOutcome = await applyBundle(bundle.bundlePath, relayPatchDir);
+        const applyOutcome = await applyBundle(bundle.bundlePath, forkhubDir);
         if (applyOutcome.success) {
           bundle.status = "applied";
           console.log(`✅ ${bundle.patchId} applied successfully!`);
@@ -208,7 +208,7 @@ export async function runWatch(options: WatchOptions = {}): Promise<void> {
     }
 
     state.lastCheck = now.toISOString();
-    await saveWatchState(relayPatchDir, state);
+    await saveWatchState(forkhubDir, state);
 
     if (state.bundles.length > 0) {
       console.log(`\n⏳ ${state.bundles.length} bundle(s) awaiting AI realization:`);
@@ -218,7 +218,7 @@ export async function runWatch(options: WatchOptions = {}): Promise<void> {
         console.log(`   ${icon} ${b.patchId}`);
         console.log(`      ${b.bundlePath}`);
       }
-      console.log(`\n   To process: run /relay-patch in your AI agent,`);
+      console.log(`\n   To process: run /forkhub in your AI agent,`);
       console.log(`   or manually edit REALIZATION/realization.diff in the bundle.`);
     }
 

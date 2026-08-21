@@ -9,7 +9,7 @@ import {
 } from "./git";
 
 export type InitOptions = {
-  relayPatchDir?: string;
+  forkhubDir?: string;
   upstreamRemote?: string;
   forkRemote?: string;
   target?: string;
@@ -17,7 +17,7 @@ export type InitOptions = {
 
 export type InitResult = {
   targetRepo: string;
-  relayPatchDir: string;
+  forkhubDir: string;
   upstreamRemote: string;
   upstreamUrl: string;
   forkRemote: string | null;
@@ -38,7 +38,7 @@ function parseRemoteUrl(url: string): string | null {
 
 export async function runInit(options: InitOptions = {}): Promise<InitResult> {
   if (!(await isGitRepo())) {
-    throw new Error("Not a git repository. Run `relay-patch init` from inside your fork's checkout.");
+    throw new Error("Not a git repository. Run `forkhub init` from inside your fork's checkout.");
   }
 
   const upstreamRemoteName = options.upstreamRemote ?? "upstream";
@@ -86,20 +86,20 @@ export async function runInit(options: InitOptions = {}): Promise<InitResult> {
     );
   }
 
-  const relayPatchDir = options.relayPatchDir ?? join(process.cwd(), "..", ".relay-patch");
-  const alreadyExists = existsSync(join(relayPatchDir, ".git"));
+  const forkhubDir = options.forkhubDir ?? join(process.cwd(), "..", ".forkhub");
+  const alreadyExists = existsSync(join(forkhubDir, ".git"));
   const created = !alreadyExists;
 
   if (!alreadyExists) {
-    mkdirSync(relayPatchDir, { recursive: true });
-    await gitOrThrow(["init", "--quiet"], relayPatchDir);
+    mkdirSync(forkhubDir, { recursive: true });
+    await gitOrThrow(["init", "--quiet"], forkhubDir);
   }
 
-  const repoDir = join(relayPatchDir, "repos", targetRepo);
+  const repoDir = join(forkhubDir, "repos", targetRepo);
   mkdirSync(repoDir, { recursive: true });
   mkdirSync(join(repoDir, "patches"), { recursive: true });
 
-  const globalJsonPath = join(relayPatchDir, "global.json");
+  const globalJsonPath = join(forkhubDir, "global.json");
   if (!existsSync(globalJsonPath)) {
     const username = await gitOrThrow(["config", "user.name"]).catch(() => "unknown");
     await Bun.write(
@@ -164,20 +164,20 @@ export async function runInit(options: InitOptions = {}): Promise<InitResult> {
     );
   }
 
-  const readmePath = join(relayPatchDir, "README.md");
+  const readmePath = join(forkhubDir, "README.md");
   if (!existsSync(readmePath)) {
     const forkNote = isFork
-      ? `\n\nThis is a FORK of ${targetRepo}. The 'upstream' remote tracks the original; the 'origin' remote is your fork. Use \`relay-patch pr\` to push draft branches and open PRs back to upstream.\n`
+      ? `\n\nThis is a FORK of ${targetRepo}. The 'upstream' remote tracks the original; the 'origin' remote is your fork. Use \`forkhub pr\` to push draft branches and open PRs back to upstream.\n`
       : "";
     await Bun.write(
       readmePath,
-      `# .relay-patch\n\nPatch intents managed by [relay-patch](https://github.com/ImBIos/relay-patch) for ${targetRepo}.${forkNote}\n`,
+      `# .forkhub\n\nPatch intents managed by [forkhub](https://github.com/ImBIOS/forkhub) for ${targetRepo}.${forkNote}\n`,
     );
   }
 
   return {
     targetRepo,
-    relayPatchDir,
+    forkhubDir,
     upstreamRemote: trackingRemote,
     upstreamUrl: trackingUrl,
     forkRemote: isFork ? forkRemote : null,

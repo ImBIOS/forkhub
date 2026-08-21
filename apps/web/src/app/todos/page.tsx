@@ -1,15 +1,15 @@
 "use client";
 
-import { Button } from "@relay-patch/ui/components/button";
+import { Button } from "@forkhub/ui/components/button";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@relay-patch/ui/components/card";
-import { Checkbox } from "@relay-patch/ui/components/checkbox";
-import { Input } from "@relay-patch/ui/components/input";
+} from "@forkhub/ui/components/card";
+import { Checkbox } from "@forkhub/ui/components/checkbox";
+import { Input } from "@forkhub/ui/components/input";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Loader2, Trash2 } from "lucide-react";
 import { useState, type FormEvent } from "react";

@@ -74,7 +74,7 @@ importers:
 
   .:
     dependencies:
-      '@relay-patch/env':
+      '@forkhub/env':
         specifier: workspace:*
         version: link:packages/env
       dotenv:
@@ -84,7 +84,7 @@ importers:
         specifier: 'catalog:'
         version: 4.4.3
     devDependencies:
-      '@relay-patch/config':
+      '@forkhub/config':
         specifier: workspace:*
         version: link:packages/config
       '@types/bun':
@@ -166,6 +166,15 @@ importers:
       '@elysiajs/cors':
         specifier: ^1.4.2
         version: 1.4.2(elysia@1.4.29(@sinclair/typebox@0.34.52)(@types/bun@1.3.14)(exact-mirror@1.2.2)(file-type@22.0.1)(openapi-types@12.1.3)(typescript@6.0.3))
+      '@forkhub/api':
+        specifier: workspace:*
+        version: link:../../packages/api
+      '@forkhub/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@forkhub/env':
+        specifier: workspace:*
+        version: link:../../packages/env
       '@orpc/openapi':
         specifier: 'catalog:'
         version: 1.14.8
@@ -175,15 +184,6 @@ importers:
       '@orpc/zod':
         specifier: 'catalog:'
         version: 1.14.8(@orpc/contract@1.14.8)(@orpc/server@1.14.8)(zod@4.4.3)
-      '@relay-patch/api':
-        specifier: workspace:*
-        version: link:../../packages/api
-      '@relay-patch/db':
-        specifier: workspace:*
-        version: link:../../packages/db
-      '@relay-patch/env':
-        specifier: workspace:*
-        version: link:../../packages/env
       '@sinclair/typebox':
         specifier: ^0.34.49
         version: 0.34.52
@@ -200,7 +200,7 @@ importers:
         specifier: 'catalog:'
         version: 4.4.3
     devDependencies:
-      '@relay-patch/config':
+      '@forkhub/config':
         specifier: workspace:*
         version: link:../../packages/config
       '@types/bun':
@@ -215,6 +215,15 @@ importers:
 
   apps/web:
     dependencies:
+      '@forkhub/api':
+        specifier: workspace:*
+        version: link:../../packages/api
+      '@forkhub/env':
+        specifier: workspace:*
+        version: link:../../packages/env
+      '@forkhub/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       '@orpc/client':
         specifier: 'catalog:'
         version: 1.14.8
@@ -224,15 +233,6 @@ importers:
       '@orpc/tanstack-query':
         specifier: ^1.14.6
         version: 1.14.8(@orpc/client@1.14.8)(@tanstack/query-core@5.101.2)
-      '@relay-patch/api':
-        specifier: workspace:*
-        version: link:../../packages/api
-      '@relay-patch/env':
-        specifier: workspace:*
-        version: link:../../packages/env
-      '@relay-patch/ui':
-        specifier: workspace:*
-        version: link:../../packages/ui
       '@swc/helpers':
         specifier: ^0.5.23
         version: 0.5.23
@@ -270,7 +270,7 @@ importers:
         specifier: 'catalog:'
         version: 4.4.3
     devDependencies:
-      '@relay-patch/config':
+      '@forkhub/config':
         specifier: workspace:*
         version: link:../../packages/config
       '@tailwindcss/postcss':
@@ -297,6 +297,12 @@ importers:
 
   packages/api:
     dependencies:
+      '@forkhub/db':
+        specifier: workspace:*
+        version: link:../db
+      '@forkhub/env':
+        specifier: workspace:*
+        version: link:../env
       '@orpc/client':
         specifier: 'catalog:'
         version: 1.14.8
@@ -309,12 +315,6 @@ importers:
       '@orpc/zod':
         specifier: 'catalog:'
         version: 1.14.8(@orpc/contract@1.14.8)(@orpc/server@1.14.8)(zod@4.4.3)
-      '@relay-patch/db':
-        specifier: workspace:*
-        version: link:../db
-      '@relay-patch/env':
-        specifier: workspace:*
-        version: link:../env
       '@types/pg':
         specifier: 'catalog:'
         version: 8.20.0
@@ -328,7 +328,7 @@ importers:
         specifier: 'catalog:'
         version: 4.4.3
     devDependencies:
-      '@relay-patch/config':
+      '@forkhub/config':
         specifier: workspace:*
         version: link:../config
       elysia:
@@ -352,7 +352,7 @@ importers:
 
   packages/db:
     dependencies:
-      '@relay-patch/env':
+      '@forkhub/env':
         specifier: workspace:*
         version: link:../env
       dotenv:
@@ -368,7 +368,7 @@ importers:
         specifier: 'catalog:'
         version: 4.4.3
     devDependencies:
-      '@relay-patch/config':
+      '@forkhub/config':
         specifier: workspace:*
         version: link:../config
       '@types/pg':
@@ -396,7 +396,7 @@ importers:
         specifier: 'catalog:'
         version: 4.4.3
     devDependencies:
-      '@relay-patch/config':
+      '@forkhub/config':
         specifier: workspace:*
         version: link:../config
       '@types/bun':
@@ -445,7 +445,7 @@ importers:
         specifier: ^1.4.0
         version: 1.4.0
     devDependencies:
-      '@relay-patch/config':
+      '@forkhub/config':
         specifier: workspace:*
         version: link:../config
       '@tailwindcss/postcss':
@@ -6332,7 +6332,7 @@ snapshots:
 
   bun-types@1.3.14:
     dependencies:
-      '@types/node': 25.9.3
+      '@types/node': 26.1.1
 
   bundle-name@4.1.0:
     dependencies:

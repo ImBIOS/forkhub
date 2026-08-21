@@ -1,4 +1,4 @@
-import { cn } from "@relay-patch/ui/lib/utils";
+import { cn } from "@forkhub/ui/lib/utils";
 
 function Skeleton({ className, ...props }: React.ComponentProps<"div">) {
   return (

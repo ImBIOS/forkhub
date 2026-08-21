@@ -1,11 +1,11 @@
 {
-  "name": "relay-patch",
+  "name": "forkhub",
   "version": "0.2.10",
   "description": "Keep up-to-date upstream + your custom patches. Patches are intent, not diffs.",
   "module": "src/cli.ts",
   "type": "module",
   "bin": {
-    "relay-patch": "./bin/relay-patch.js"
+    "fh": "./bin/fh.js"
   },
   "files": [
     "bin",
@@ -52,12 +52,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ImBIOS/relay-patch.git"
+    "url": "git+https://github.com/ImBIOS/forkhub.git"
   },
   "bugs": {
-    "url": "https://github.com/ImBIOS/relay-patch/issues"
+    "url": "https://github.com/ImBIOS/forkhub/issues"
   },
-  "homepage": "https://github.com/ImBIOS/relay-patch#readme",
+  "homepage": "https://github.com/ImBIOS/forkhub#readme",
   "publishConfig": {
     "provenance": true,
     "access": "public"

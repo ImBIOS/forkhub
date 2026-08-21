@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { isGitRepo, gitOrThrow, gitExec } from "./git";
 
 export type PublishOptions = {
-  relayPatchDir?: string;
+  forkhubDir?: string;
   message?: string;
 };
 
@@ -16,35 +16,35 @@ export type PublishResult = {
 };
 
 export async function runPublish(options: PublishOptions = {}): Promise<PublishResult> {
-  const relayPatchDir = options.relayPatchDir ?? join(process.cwd(), "..", ".relay-patch");
-  if (!existsSync(relayPatchDir)) {
-    throw new Error(".relay-patch repo not found. Run `relay-patch init` first.");
+  const forkhubDir = options.forkhubDir ?? join(process.cwd(), "..", ".forkhub");
+  if (!existsSync(forkhubDir)) {
+    throw new Error(".forkhub repo not found. Run `forkhub init` first.");
   }
 
   // Check that it's a git repo
-  const isRepo = await isGitRepo(relayPatchDir);
+  const isRepo = await isGitRepo(forkhubDir);
   if (!isRepo) {
     throw new Error(
-      `${relayPatchDir} is not a git repo. Initialize it with: cd ${relayPatchDir} && git init && git remote add origin <your-github-repo>`,
+      `${forkhubDir} is not a git repo. Initialize it with: cd ${forkhubDir} && git init && git remote add origin <your-github-repo>`,
     );
   }
 
   // Check remote exists
-  const remoteResult = await gitExec(["remote", "get-url", "origin"], relayPatchDir);
+  const remoteResult = await gitExec(["remote", "get-url", "origin"], forkhubDir);
   if (remoteResult.exitCode !== 0) {
     throw new Error(
-      "No 'origin' remote set on .relay-patch repo. Add one:\n" +
-        `  cd ${relayPatchDir}\n` +
-        "  git remote add origin git@github.com:USERNAME/.relay-patch.git",
+      "No 'origin' remote set on .forkhub repo. Add one:\n" +
+        `  cd ${forkhubDir}\n` +
+        "  git remote add origin git@github.com:USERNAME/.forkhub.git",
     );
   }
   const remote = remoteResult.stdout;
 
   // Stage all patch files
-  await gitOrThrow(["add", "-A"], relayPatchDir);
+  await gitOrThrow(["add", "-A"], forkhubDir);
 
   // Check if there's anything to commit
-  const statusResult = await gitExec(["status", "--porcelain", "--untracked-files=no"], relayPatchDir);
+  const statusResult = await gitExec(["status", "--porcelain", "--untracked-files=no"], forkhubDir);
   const stagedFiles = statusResult.stdout
     .split("\n")
     .filter((l) => l.trim().length > 0)
@@ -52,7 +52,7 @@ export async function runPublish(options: PublishOptions = {}): Promise<PublishR
 
   if (stagedFiles.length === 0) {
     // Nothing to publish
-    const shaResult = await gitExec(["rev-parse", "HEAD"], relayPatchDir);
+    const shaResult = await gitExec(["rev-parse", "HEAD"], forkhubDir);
     return {
       pushed: false,
       remote,
@@ -66,12 +66,12 @@ export async function runPublish(options: PublishOptions = {}): Promise<PublishR
   const message =
     options.message ??
     `chore: sync patches (${new Date().toISOString().split("T")[0]})`;
-  await gitOrThrow(["commit", "-m", message, "--no-allow-empty"], relayPatchDir);
+  await gitOrThrow(["commit", "-m", message, "--no-allow-empty"], forkhubDir);
 
   // Push
-  const branchResult = await gitExec(["rev-parse", "--abbrev-ref", "HEAD"], relayPatchDir);
+  const branchResult = await gitExec(["rev-parse", "--abbrev-ref", "HEAD"], forkhubDir);
   const branch = branchResult.stdout || "main";
-  const pushResult = await gitExec(["push", "origin", branch], relayPatchDir);
+  const pushResult = await gitExec(["push", "origin", branch], forkhubDir);
   if (pushResult.exitCode !== 0) {
     throw new Error(
       `git push failed: ${pushResult.stderr || pushResult.stdout}\n` +
@@ -80,7 +80,7 @@ export async function runPublish(options: PublishOptions = {}): Promise<PublishR
     );
   }
 
-  const shaResult = await gitExec(["rev-parse", "HEAD"], relayPatchDir);
+  const shaResult = await gitExec(["rev-parse", "HEAD"], forkhubDir);
 
   return {
     pushed: true,

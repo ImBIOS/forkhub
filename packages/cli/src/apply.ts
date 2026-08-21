@@ -10,7 +10,7 @@ import {
 } from "./git";
 
 export type ApplyOptions = {
-  relayPatchDir?: string;
+  forkhubDir?: string;
   skipTests?: boolean;
   skipTag?: boolean;
 };
@@ -84,14 +84,14 @@ export async function runApply(bundlePath: string, options: ApplyOptions = {}): 
   let testsPass = false;
   let tag: string | null = null;
 
-  const rpMainExists = await gitExec(["rev-parse", "--verify", "relay-patch/main"]);
-  if (rpMainExists.exitCode !== 0) {
-    errors.push("relay-patch/main branch does not exist. Run `relay-patch satisfied` at least once first.");
+  const fhMainExists = await gitExec(["rev-parse", "--verify", "forkhub/main"]);
+  if (fhMainExists.exitCode !== 0) {
+    errors.push("forkhub/main branch does not exist. Run `forkhub satisfied` at least once first.");
     return { bundlePath, patchId, diffApplied, testsPass, tag, errors };
   }
 
   const previousBranch = await gitOrThrow(["rev-parse", "--abbrev-ref", "HEAD"]);
-  await checkout("relay-patch/main");
+  await checkout("forkhub/main");
 
   try {
     const checkResult = await gitExec(["apply", "--check", realizationDiffPath]);
@@ -108,7 +108,7 @@ export async function runApply(bundlePath: string, options: ApplyOptions = {}): 
     diffApplied = true;
 
     if (!options.skipTests) {
-      const relayPatchDir = options.relayPatchDir ?? join(process.cwd(), "..", ".relay-patch");
+      const forkhubDir = options.forkhubDir ?? join(process.cwd(), "..", ".forkhub");
       let patchDir: string | null = null;
       const { existsSync: exists, readdirSync, statSync } = await import("node:fs");
       function findPatch(dir: string, targetId: string): string | null {
@@ -123,7 +123,7 @@ export async function runApply(bundlePath: string, options: ApplyOptions = {}): 
         }
         return null;
       }
-      patchDir = findPatch(join(relayPatchDir, "repos"), patchId);
+      patchDir = findPatch(join(forkhubDir, "repos"), patchId);
 
       if (patchDir) {
         const { runVerify } = await import("./verify");
@@ -149,20 +149,20 @@ export async function runApply(bundlePath: string, options: ApplyOptions = {}): 
     }
 
     if (!options.skipTag) {
-      const upstreamTagResult = await gitExec(["describe", "--tags", "--abbrev=0", "relay-patch/main"]);
+      const upstreamTagResult = await gitExec(["describe", "--tags", "--abbrev=0", "forkhub/main"]);
       const upstreamTag = upstreamTagResult.exitCode === 0 ? upstreamTagResult.stdout : "v0.0.0";
-      const rpTagsResult = await gitExec(["tag", "--list", `${upstreamTag}-rp*`]);
-      const rpCount = rpTagsResult.stdout ? rpTagsResult.stdout.split("\n").filter(Boolean).length : 0;
-      tag = `${upstreamTag}-rp${rpCount + 1}`;
+      const fhTagsResult = await gitExec(["tag", "--list", `${upstreamTag}-fh*`]);
+      const fhCount = fhTagsResult.stdout ? fhTagsResult.stdout.split("\n").filter(Boolean).length : 0;
+      tag = `${upstreamTag}-fh${fhCount + 1}`;
       await gitOrThrow(["tag", tag]);
     }
   } finally {
     await checkout(previousBranch);
   }
 
-  const relayPatchDir = options.relayPatchDir ?? join(process.cwd(), "..", ".relay-patch");
-  if (existsSync(relayPatchDir)) {
-    const reposDir = join(relayPatchDir, "repos");
+  const forkhubDir = options.forkhubDir ?? join(process.cwd(), "..", ".forkhub");
+  if (existsSync(forkhubDir)) {
+    const reposDir = join(forkhubDir, "repos");
     const { readdirSync, statSync } = await import("node:fs");
     function findPatchDir(dir: string, targetPatchId: string): string | null {
       if (!existsSync(dir)) return null;

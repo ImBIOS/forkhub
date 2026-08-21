@@ -1,13 +1,13 @@
-# relay-patch
+# forkhub
 
 **Keep up-to-date upstream + your custom patches. Patches are intent, not diffs.**
 
 ```bash
-$ npx relay-patch init
-$ relay-patch draft "add --cheat flag to reveal the secret"
+$ npx forkhub init
+$ forkhub draft "add --cheat flag to reveal the secret"
 # ... AI implements, you test ...
-$ relay-patch satisfied
-$ relay-patch update  # when upstream releases
+$ forkhub satisfied
+$ forkhub update  # when upstream releases
 ```
 
 You maintain a fork. The maintainer rejected your PR. You want both their fixes
@@ -28,42 +28,42 @@ gap: v2.1.0 features you don't have
 **Today:** choose — official release (lose your patch) or your fork (lose upstream features).
 The pain: every upstream release, manually re-apply, re-fix, re-test.
 
-**With relay-patch:** declare your patch as **intent** ("add --cheat flag, print before banner, don't touch game.ts"). An AI agent re-realizes your intent against every new upstream release. You run `relay-patch update` and get both: your patch + the latest upstream.
+**With forkhub:** declare your patch as **intent** ("add --cheat flag, print before banner, don't touch game.ts"). An AI agent re-realizes your intent against every new upstream release. You run `forkhub update` and get both: your patch + the latest upstream.
 
 ## Install
 
 ### Homebrew (macOS / Linux)
 
 ```bash
-brew tap ImBIOS/tap https://github.com/ImBIOS/relay-patch
-brew install relay-patch
+brew tap ImBIOS/tap https://github.com/ImBIOS/forkhub
+brew install forkhub
 ```
 
 ### npm
 
 ```bash
-npm install -g relay-patch
+npm install -g forkhub
 # or
-bun add -g relay-patch
+bun add -g forkhub
 # or
-npx relay-patch init
+npx forkhub init
 ```
 
 ### Standalone binary
 
 ```bash
-curl -fsSL https://github.com/ImBIOS/relay-patch/releases/latest/download/relay-patch-$(uname -s | tr A-Z a-z)-$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/') -o relay-patch
-chmod +x relay-patch
-sudo mv relay-patch /usr/local/bin/
+curl -fsSL https://github.com/ImBIOS/forkhub/releases/latest/download/forkhub-$(uname -s | tr A-Z a-z)-$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/') -o forkhub
+chmod +x forkhub
+sudo mv forkhub /usr/local/bin/
 ```
 
 ### From source
 
 ```bash
-git clone https://github.com/ImBIOS/relay-patch
-cd relay-patch
+git clone https://github.com/ImBIOS/forkhub
+cd forkhub
 bun install
-bun run build:binaries  # → ./dist/relay-patch-*
+bun run build:binaries  # → ./dist/forkhub-*
 ```
 
 Requires [Bun](https://bun.sh) ≥ 1.3 and `git`.
@@ -72,27 +72,27 @@ Requires [Bun](https://bun.sh) ≥ 1.3 and `git`.
 
 ```bash
 # 1. From inside your fork's checkout
-relay-patch init
+forkhub init
 
 # 2. In OpenCode, run the slash command to create a patch
-/relay-patch "add --cheat flag to reveal the secret number"
+/forkhub "add --cheat flag to reveal the secret number"
 
 # 3. AI implements on a draft branch. Test it. When happy:
-relay-patch satisfied
+forkhub satisfied
 
 # 4. When upstream releases a new version:
-relay-patch update    # consumer-side: advance to latest tag
-relay-patch watch     # daemon-side: auto-detect drift, generate bundles, apply
+forkhub update    # consumer-side: advance to latest tag
+forkhub watch     # daemon-side: auto-detect drift, generate bundles, apply
 ```
 
 ## Commands
 
 | Command | Purpose |
 |---|---|
-| `init` | Set up `.relay-patch` repo + config |
+| `init` | Set up `.forkhub` repo + config |
 | `draft "<intent>"` | Create a `*` branch + draft INTENT.md |
-| `satisfied` | Finalize intent, capture diff, port to `relay-patch/main`, tag |
-| `import <github-url>` | Import a patch from another user's `.relay-patch` |
+| `satisfied` | Finalize intent, capture diff, port to `forkhub/main`, tag |
+| `import <github-url>` | Import a patch from another user's `.forkhub` |
 | `re-derive <patch-id>` | Generate context bundle for AI re-derivation |
 | `apply <bundle-path>` | Apply realization from bundle (with verify gate) |
 | `drift-check` | Detect drift (with target_area skip for cost optimization) |
@@ -104,7 +104,7 @@ relay-patch watch     # daemon-side: auto-detect drift, generate bundles, apply
 ## How it works
 
 ```
-USERNAME/.relay-patch/         # intent repository (intent = truth)
+USERNAME/.forkhub/         # intent repository (intent = truth)
 ├── repos/
 │   └── github.com/owner/repo/
 │       ├── manifest.json
@@ -119,7 +119,7 @@ USERNAME/.relay-patch/         # intent repository (intent = truth)
 
 USER/repo/                       # your fork
 ├── main                          # tracks upstream
-├── relay-patch/main              # built artifact, force-pushed
+├── forkhub/main              # built artifact, force-pushed
 └── *                             # draft branch (per patch)
 ```
 
@@ -140,11 +140,11 @@ re-realizes against new upstream. Same intent, fresh implementation.
 
 ## Re-using patches
 
-Anyone can publish patches by making their `.relay-patch` public. Import
+Anyone can publish patches by making their `.forkhub` public. Import
 someone's:
 
 ```bash
-relay-patch import https://github.com/ALICE/.relay-patch/blob/main/repos/\
+forkhub import https://github.com/ALICE/.forkhub/blob/main/repos/\
 github.com/owner/repo/patches/<patch-id>/INTENT.md
 ```
 
@@ -154,7 +154,7 @@ fork's current state.
 ## The watch daemon
 
 ```bash
-relay-patch watch --interval 300  # check every 5 minutes
+forkhub watch --interval 300  # check every 5 minutes
 ```
 
 Loops:

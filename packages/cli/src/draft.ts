@@ -4,7 +4,7 @@ import { isGitRepo, gitOrThrow, currentBranch, createBranch, shortSha } from "./
 import { slugify } from "./patch-id";
 
 export type DraftOptions = {
-  relayPatchDir?: string;
+  forkhubDir?: string;
   upstreamBranch?: string;
 };
 
@@ -16,20 +16,20 @@ export type DraftResult = {
   baseSha: string;
 };
 
-const DRAFT_FILE = ".relay-patch-draft.md";
+const DRAFT_FILE = ".forkhub-draft.md";
 
 export async function runDraft(intent: string, options: DraftOptions = {}): Promise<DraftResult> {
   if (!intent) {
-    throw new Error("Intent description required. Usage: relay-patch draft \"<intent>\"");
+    throw new Error("Intent description required. Usage: forkhub draft \"<intent>\"");
   }
 
   if (!(await isGitRepo())) {
     throw new Error("Not a git repository. Run from inside your fork's checkout.");
   }
 
-  const relayPatchDir = options.relayPatchDir ?? join(process.cwd(), "..", ".relay-patch");
-  if (!existsSync(relayPatchDir)) {
-    throw new Error(".relay-patch repo not found. Run `relay-patch init` first.");
+  const forkhubDir = options.forkhubDir ?? join(process.cwd(), "..", ".forkhub");
+  if (!existsSync(forkhubDir)) {
+    throw new Error(".forkhub repo not found. Run `forkhub init` first.");
   }
 
   const branch = await currentBranch();
@@ -89,7 +89,7 @@ ${intent}
     gitignore = await Bun.file(gitignorePath).text();
   }
   if (!gitignore.includes(DRAFT_FILE)) {
-    gitignore = gitignore.trimEnd() + "\n" + (gitignore.length > 0 ? "\n" : "") + "# relay-patch draft\n" + DRAFT_FILE + "\n";
+    gitignore = gitignore.trimEnd() + "\n" + (gitignore.length > 0 ? "\n" : "") + "# forkhub draft\n" + DRAFT_FILE + "\n";
     await Bun.write(gitignorePath, gitignore);
   }
 

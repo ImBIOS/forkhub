@@ -10,7 +10,7 @@ export type RollbackResult = {
 export async function runRollback(options: UpdateOptions = {}): Promise<RollbackResult> {
   const current = await currentTag();
   if (!current) {
-    throw new Error("Not currently on a tag. Use `relay-patch update --tag <tag>` instead.");
+    throw new Error("Not currently on a tag. Use `forkhub update --tag <tag>` instead.");
   }
 
   const tags = await listTags();

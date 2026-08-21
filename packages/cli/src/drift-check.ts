@@ -8,7 +8,7 @@ import {
 } from "./git";
 
 export type DriftCheckOptions = {
-  relayPatchDir?: string;
+  forkhubDir?: string;
 };
 
 export type PatchDriftStatus = {
@@ -43,7 +43,7 @@ export type DriftCheckResult = {
 function readManifest(repoDir: string): any {
   const manifestPath = join(repoDir, "manifest.json");
   if (!existsSync(manifestPath)) {
-    throw new Error("manifest.json not found. Run `relay-patch init` first.");
+    throw new Error("manifest.json not found. Run `forkhub init` first.");
   }
   return JSON.parse(readFileSync(manifestPath, "utf-8"));
 }
@@ -51,7 +51,7 @@ function readManifest(repoDir: string): any {
 function readUpstreamConfig(repoDir: string): any {
   const upstreamJsonPath = join(repoDir, "upstream.json");
   if (!existsSync(upstreamJsonPath)) {
-    throw new Error("upstream.json not found. Run `relay-patch init` first.");
+    throw new Error("upstream.json not found. Run `forkhub init` first.");
   }
   return JSON.parse(readFileSync(upstreamJsonPath, "utf-8"));
 }
@@ -68,7 +68,7 @@ function readIntentTargetArea(repoDir: string, patchId: string): string[] {
     .filter(Boolean);
 }
 
-async function findTargetRepo(relayPatchDir: string, forkCwd: string): Promise<string> {
+async function findTargetRepo(forkhubDir: string, forkCwd: string): Promise<string> {
   const { getRemoteUrl, listRemotes } = await import("./git");
   for (const remote of await listRemotes(forkCwd)) {
     const url = await getRemoteUrl(remote, forkCwd);
@@ -76,18 +76,18 @@ async function findTargetRepo(relayPatchDir: string, forkCwd: string): Promise<s
     let match = url.match(/^git@([^:]+):(.+?)(?:\.git)?$/);
     if (match) {
       const targetRepo = `${match[1]}/${match[2]}`;
-      if (existsSync(join(relayPatchDir, "repos", targetRepo, "manifest.json"))) return targetRepo;
+      if (existsSync(join(forkhubDir, "repos", targetRepo, "manifest.json"))) return targetRepo;
     }
     match = url.match(/^https?:\/\/([^/]+)\/(.+?)(?:\.git)?$/);
     if (match) {
       const targetRepo = `${match[1]}/${match[2]}`;
-      if (existsSync(join(relayPatchDir, "repos", targetRepo, "manifest.json"))) return targetRepo;
+      if (existsSync(join(forkhubDir, "repos", targetRepo, "manifest.json"))) return targetRepo;
     }
   }
   const { readdirSync } = await import("node:fs");
-  const reposDir = join(relayPatchDir, "repos");
+  const reposDir = join(forkhubDir, "repos");
   if (!existsSync(reposDir)) {
-    throw new Error("No repos found in .relay-patch. Run `relay-patch init` first.");
+    throw new Error("No repos found in .forkhub. Run `forkhub init` first.");
   }
   for (const host of readdirSync(reposDir)) {
     for (const owner of readdirSync(join(reposDir, host))) {
@@ -99,7 +99,7 @@ async function findTargetRepo(relayPatchDir: string, forkCwd: string): Promise<s
       }
     }
   }
-  throw new Error("Could not determine target repo from .relay-patch.");
+  throw new Error("Could not determine target repo from .forkhub.");
 }
 
 /**
@@ -149,13 +149,13 @@ export async function runDriftCheck(options: DriftCheckOptions = {}): Promise<Dr
     throw new Error("Not a git repository. Run from inside your fork's checkout.");
   }
 
-  const relayPatchDir = options.relayPatchDir ?? join(process.cwd(), "..", ".relay-patch");
-  if (!existsSync(relayPatchDir)) {
-    throw new Error(".relay-patch repo not found. Run `relay-patch init` first.");
+  const forkhubDir = options.forkhubDir ?? join(process.cwd(), "..", ".forkhub");
+  if (!existsSync(forkhubDir)) {
+    throw new Error(".forkhub repo not found. Run `forkhub init` first.");
   }
 
-  const targetRepo = await findTargetRepo(relayPatchDir, process.cwd());
-  const repoDir = join(relayPatchDir, "repos", targetRepo);
+  const targetRepo = await findTargetRepo(forkhubDir, process.cwd());
+  const repoDir = join(forkhubDir, "repos", targetRepo);
   const manifest = readManifest(repoDir);
   const upstreamConfig = readUpstreamConfig(repoDir);
 

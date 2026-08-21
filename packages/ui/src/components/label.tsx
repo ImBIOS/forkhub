@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "@relay-patch/ui/lib/utils";
+import { cn } from "@forkhub/ui/lib/utils";
 import * as React from "react";
 
 function Label({ className, ...props }: React.ComponentProps<"label">) {

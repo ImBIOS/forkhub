@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Build standalone binaries for all supported platforms.
-# Output: dist/relay-patch-{platform} + SHA256SUMS
+# Output: dist/forkhub-{platform} + SHA256SUMS
 
 cd "$(dirname "$0")/.."
 
@@ -18,14 +18,14 @@ rm -rf dist
 mkdir -p dist
 
 for target in "${TARGETS[@]}"; do
-  outfile="dist/relay-patch-${target#bun-}"
+  outfile="dist/forkhub-${target#bun-}"
   echo "→ Building $target → $outfile"
   bun build --compile --target="$target" --minify --outfile="$outfile" ./src/cli.ts
 done
 
 echo ""
 echo "→ Computing SHA256SUMS"
-(cd dist && shasum -a 256 relay-patch-* > SHA256SUMS)
+(cd dist && shasum -a 256 forkhub-* > SHA256SUMS)
 cat dist/SHA256SUMS
 
 echo ""

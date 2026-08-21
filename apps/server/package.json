@@ -14,9 +14,9 @@
     "@orpc/openapi": "catalog:",
     "@orpc/server": "catalog:",
     "@orpc/zod": "catalog:",
-    "@relay-patch/api": "workspace:*",
-    "@relay-patch/db": "workspace:*",
-    "@relay-patch/env": "workspace:*",
+    "@forkhub/api": "workspace:*",
+    "@forkhub/db": "workspace:*",
+    "@forkhub/env": "workspace:*",
     "@sinclair/typebox": "^0.34.49",
     "dotenv": "catalog:",
     "elysia": "catalog:",
@@ -24,7 +24,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@relay-patch/config": "workspace:*",
+    "@forkhub/config": "workspace:*",
     "@types/bun": "catalog:",
     "tsdown": "^0.22.3",
     "typescript": "catalog:"

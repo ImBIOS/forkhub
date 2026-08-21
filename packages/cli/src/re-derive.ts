@@ -11,7 +11,7 @@ import {
 } from "./git";
 
 export type ReDeriveOptions = {
-  relayPatchDir?: string;
+  forkhubDir?: string;
   force?: boolean;
 };
 
@@ -52,8 +52,8 @@ function dirname(path: string): string {
   return idx === -1 ? "." : path.slice(0, idx);
 }
 
-async function findTargetRepo(relayPatchDir: string, forkCwd: string): Promise<string | null> {
-  const reposDir = join(relayPatchDir, "repos");
+async function findTargetRepo(forkhubDir: string, forkCwd: string): Promise<string | null> {
+  const reposDir = join(forkhubDir, "repos");
   if (!existsSync(reposDir)) return null;
   const { getRemoteUrl, listRemotes } = await import("./git");
   for (const remote of await listRemotes(forkCwd)) {
@@ -107,17 +107,17 @@ export async function runReDerive(patchId: string, options: ReDeriveOptions = {}
     throw new Error("Not a git repository. Run from inside your fork's checkout.");
   }
 
-  const relayPatchDir = options.relayPatchDir ?? join(process.cwd(), "..", ".relay-patch");
-  if (!existsSync(relayPatchDir)) {
-    throw new Error(".relay-patch repo not found. Run `relay-patch init` first.");
+  const forkhubDir = options.forkhubDir ?? join(process.cwd(), "..", ".forkhub");
+  if (!existsSync(forkhubDir)) {
+    throw new Error(".forkhub repo not found. Run `forkhub init` first.");
   }
 
-  const targetRepo = await findTargetRepo(relayPatchDir, process.cwd());
+  const targetRepo = await findTargetRepo(forkhubDir, process.cwd());
   if (!targetRepo) {
-    throw new Error("Could not determine target repo. Run `relay-patch init` first.");
+    throw new Error("Could not determine target repo. Run `forkhub init` first.");
   }
 
-  const repoDir = join(relayPatchDir, "repos", targetRepo);
+  const repoDir = join(forkhubDir, "repos", targetRepo);
   const manifest = readManifest(repoDir);
   const patchInfo = manifest.patches[patchId];
   if (!patchInfo) {
@@ -149,7 +149,7 @@ export async function runReDerive(patchId: string, options: ReDeriveOptions = {}
   }
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const bundlePath = join(relayPatchDir, "derive", patchId, timestamp);
+  const bundlePath = join(forkhubDir, "derive", patchId, timestamp);
   ensureDir(bundlePath);
   ensureDir(join(bundlePath, "REALIZATION"));
 
@@ -228,18 +228,18 @@ ${diffFull || "(no diff)"}
     }
   }
 
-  const forkFiles = existsSync(join(process.cwd(), "relay-patch/main"))
-    ? ["relay-patch/main"]
+  const forkFiles = existsSync(join(process.cwd(), "forkhub/main"))
+    ? ["forkhub/main"]
     : [];
   if (targetArea.length > 0) {
-    const rpMainExists = await gitExec(["rev-parse", "--verify", "relay-patch/main"]);
-    if (rpMainExists.exitCode === 0) {
+    const fhMainExists = await gitExec(["rev-parse", "--verify", "forkhub/main"]);
+    if (fhMainExists.exitCode === 0) {
       const currentBranch = (await gitOrThrow(["rev-parse", "--abbrev-ref", "HEAD"]));
-      if (currentBranch !== "relay-patch/main") {
-        await gitOrThrow(["checkout", "--quiet", "relay-patch/main"]);
+      if (currentBranch !== "forkhub/main") {
+        await gitOrThrow(["checkout", "--quiet", "forkhub/main"]);
       }
       copyFiles(targetArea, process.cwd(), join(bundlePath, "fork"));
-      if (currentBranch !== "relay-patch/main") {
+      if (currentBranch !== "forkhub/main") {
         await gitOrThrow(["checkout", "--quiet", currentBranch]);
       }
       filesInBundle.push(...targetArea.map((f) => `fork/${f}`));
@@ -296,7 +296,7 @@ saved to \`REALIZATION/\`.
 
 ## After the AI finishes
 
-Run \`relay-patch apply ${bundlePath}\` to validate and finalize.
+Run \`forkhub apply ${bundlePath}\` to validate and finalize.
 `;
   await Bun.write(join(bundlePath, "README.md"), readme);
   filesInBundle.push("README.md");
@@ -327,7 +327,7 @@ You are re-deriving the patch \`${patchId}\` against new upstream code.
 
 ## Output
 
-When done, the \`relay-patch apply\` command will validate and finalize. Make sure:
+When done, the \`forkhub apply\` command will validate and finalize. Make sure:
 - \`REALIZATION/realization.diff\` exists and is non-empty
 - \`REALIZATION/report.md\` describes what you did
 

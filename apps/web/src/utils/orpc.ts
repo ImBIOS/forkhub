@@ -1,8 +1,8 @@
 import { createORPCClient } from "@orpc/client";
 import { RPCLink } from "@orpc/client/fetch";
 import { createTanstackQueryUtils } from "@orpc/tanstack-query";
-import type { AppRouterClient } from "@relay-patch/api/routers/index";
-import { env } from "@relay-patch/env/web";
+import type { AppRouterClient } from "@forkhub/api/routers/index";
+import { env } from "@forkhub/env/web";
 import { QueryCache, QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 

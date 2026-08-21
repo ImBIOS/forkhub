@@ -1,5 +1,5 @@
 {
-  "name": "@relay-patch/api",
+  "name": "@forkhub/api",
   "type": "module",
   "exports": {
     ".": {
@@ -15,15 +15,15 @@
     "@orpc/openapi": "catalog:",
     "@orpc/server": "catalog:",
     "@orpc/zod": "catalog:",
-    "@relay-patch/db": "workspace:*",
-    "@relay-patch/env": "workspace:*",
+    "@forkhub/db": "workspace:*",
+    "@forkhub/env": "workspace:*",
     "@types/pg": "catalog:",
     "dotenv": "catalog:",
     "drizzle-orm": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@relay-patch/config": "workspace:*",
+    "@forkhub/config": "workspace:*",
     "elysia": "catalog:",
     "typescript": "catalog:"
   }

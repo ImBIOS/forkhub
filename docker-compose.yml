@@ -1,4 +1,4 @@
-name: relay-patch
+name: forkhub
 
 services:
   web:
@@ -44,7 +44,7 @@ services:
         required: false
     environment:
       CORS_ORIGIN: http://localhost:3001
-      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-password}@postgres:5432/relay-patch
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-password}@postgres:5432/forkhub
     healthcheck:
       test:
         [
@@ -64,15 +64,15 @@ services:
 
   postgres:
     image: postgres:18
-    container_name: relay-patch-postgres
+    container_name: forkhub-postgres
     environment:
-      POSTGRES_DB: relay-patch
+      POSTGRES_DB: forkhub
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
     ports:
       - "5432:5432"
     volumes:
-      - relay-patch_postgres_data:/var/lib/postgresql
+      - forkhub_postgres_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
@@ -81,4 +81,4 @@ services:
     restart: unless-stopped
 
 volumes:
-  relay-patch_postgres_data:
+  forkhub_postgres_data:

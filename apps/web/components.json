@@ -13,8 +13,8 @@
   "iconLibrary": "lucide",
   "aliases": {
     "components": "@/components",
-    "utils": "@relay-patch/ui/lib/utils",
-    "ui": "@relay-patch/ui/components",
+    "utils": "@forkhub/ui/lib/utils",
+    "ui": "@forkhub/ui/components",
     "lib": "@/lib",
     "hooks": "@/hooks"
   },

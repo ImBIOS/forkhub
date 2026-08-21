@@ -12,11 +12,11 @@
   },
   "iconLibrary": "lucide",
   "aliases": {
-    "components": "@relay-patch/ui/components",
-    "utils": "@relay-patch/ui/lib/utils",
-    "hooks": "@relay-patch/ui/hooks",
-    "lib": "@relay-patch/ui/lib",
-    "ui": "@relay-patch/ui/components"
+    "components": "@forkhub/ui/components",
+    "utils": "@forkhub/ui/lib/utils",
+    "hooks": "@forkhub/ui/hooks",
+    "lib": "@forkhub/ui/lib",
+    "ui": "@forkhub/ui/components"
   },
   "menuColor": "default",
   "menuAccent": "subtle",

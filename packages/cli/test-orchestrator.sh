@@ -7,15 +7,15 @@ set -e
 WS=/workspace
 UPSTREAM=$WS/upstream
 FORK=$WS/fork
-RP=$WS/.relay-patch
+RP=$WS/.forkhub
 
 # Configure git for the container
-git config --global user.email "test@relay-patch"
-git config --global user.name "relay-patch test"
+git config --global user.email "test@forkhub"
+git config --global user.name "forkhub test"
 git config --global init.defaultBranch main
 
 echo "============================================"
-echo "  relay-patch orchestrator test (in Docker)"
+echo "  forkhub orchestrator test (in Docker)"
 echo "============================================"
 echo ""
 
@@ -77,15 +77,15 @@ git remote rename origin upstream
 git checkout -b main 2>/dev/null || git checkout main
 echo "  fork created at $FORK"
 
-# === Init relay-patch ===
+# === Init forkhub ===
 echo ""
-echo "--- Step 1: relay-patch init ---"
+echo "--- Step 1: forkhub init ---"
 cd $FORK
 bun /app/src/cli.ts init --target github.com/test/test-game 2>&1
 
-# === Verify .relay-patch was created ===
+# === Verify .forkhub was created ===
 echo ""
-echo "--- Verify .relay-patch structure ---"
+echo "--- Verify .forkhub structure ---"
 ls -la $RP/
 echo ""
 ls -la $RP/repos/github.com/test/test-game/
@@ -108,7 +108,7 @@ echo "  patch implemented and committed"
 
 # === Finalize the patch ===
 echo ""
-echo "--- Step 4: relay-patch satisfied ---"
+echo "--- Step 4: forkhub satisfied ---"
 cd $FORK
 bun /app/src/cli.ts satisfied 2>&1
 

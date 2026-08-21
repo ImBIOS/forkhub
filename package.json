@@ -1,5 +1,5 @@
 {
-  "name": "relay-patch-monorepo",
+  "name": "forkhub-monorepo",
   "private": true,
   "workspaces": [
     "apps/*",
@@ -12,10 +12,10 @@
     "check-types": "turbo run check-types",
     "dev:web": "turbo run dev -F web",
     "dev:server": "turbo run dev -F server",
-    "db:push": "turbo run db:push -F @relay-patch/db",
-    "db:studio": "turbo run db:studio -F @relay-patch/db",
-    "db:generate": "turbo run db:generate -F @relay-patch/db",
-    "db:migrate": "turbo run db:migrate -F @relay-patch/db",
+    "db:push": "turbo run db:push -F @forkhub/db",
+    "db:studio": "turbo run db:studio -F @forkhub/db",
+    "db:generate": "turbo run db:generate -F @forkhub/db",
+    "db:migrate": "turbo run db:migrate -F @forkhub/db",
     "db:start": "docker compose up -d postgres",
     "db:watch": "docker compose up postgres",
     "db:stop": "docker compose stop postgres",
@@ -27,12 +27,12 @@
     "check": "oxlint && oxfmt --write"
   },
   "dependencies": {
-    "@relay-patch/env": "workspace:*",
+    "@forkhub/env": "workspace:*",
     "dotenv": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@relay-patch/config": "workspace:*",
+    "@forkhub/config": "workspace:*",
     "@types/bun": "catalog:",
     "lefthook": "^2.1.9",
     "oxfmt": "^0.57.0",
