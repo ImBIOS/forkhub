@@ -40,5 +40,9 @@
     "turbo": "^2.10.2",
     "typescript": "catalog:"
   },
-  "packageManager": "pnpm@11.22.0"
+  "packageManager": "pnpm@11.22.0",
+  "bin": {
+    "fh": "./packages/cli/bin/fh.js",
+    "forkhub": "./packages/cli/bin/fh.js"
+  }
 }
