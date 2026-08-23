@@ -57,8 +57,26 @@ jobs:
 
   # ────────────────────────── canary channel: npm ────────────────────────
 
+  canary-typecheck:
+    if: github.ref == 'refs/heads/canary'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+        with:
+          cache: true
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck CLI
+        run: pnpm exec tsc --noEmit
+        working-directory: packages/cli
+
   publish-canary-npm:
     if: github.ref == 'refs/heads/canary'
+    needs: [canary-typecheck]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -77,10 +95,6 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
-      - name: Typecheck
-        run: pnpm exec tsc --noEmit
-        working-directory: packages/cli
 
       - name: Compute canary version
         id: ver
@@ -104,6 +118,7 @@ jobs:
 
   canary-binaries:
     if: github.ref == 'refs/heads/canary'
+    needs: [canary-typecheck]
     strategy:
       fail-fast: false
       matrix:
@@ -126,8 +141,6 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-      - run: bunx tsc --noEmit
-        working-directory: packages/cli
       - name: Build binary
         run: |
           mkdir -p dist
@@ -253,8 +266,6 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-      - run: bunx tsc --noEmit
-        working-directory: packages/cli
       - name: Build binary
         run: |
           mkdir -p dist
