@@ -6,6 +6,7 @@ import {
   gitExec,
   shortSha,
 } from "./git";
+import { bold, dim, green, yellow, red, magenta, cyan, gray, ok, warn, fail, statusBadge, sha as paintSha, meta } from "./style";
 
 export type DriftCheckOptions = {
   forkhubDir?: string;
@@ -279,45 +280,61 @@ export async function runDriftCheck(options: DriftCheckOptions = {}): Promise<Dr
 export function formatDriftCheckResult(result: DriftCheckResult): string {
   const lines: string[] = [];
 
-  lines.push(`Upstream:  ${shortSha(result.upstreamSha)} ${result.upstreamAdvanced ? `(advanced from ${shortSha(result.lastKnownSha)})` : "(unchanged)"}`);
+  const advancedNote = result.upstreamAdvanced
+    ? yellow(`(advanced from ${shortSha(result.lastKnownSha)})`)
+    : green("(unchanged)");
+  lines.push(`Upstream:  ${paintSha(shortSha(result.upstreamSha))} ${advancedNote}`);
   lines.push("");
 
   if (result.patches.length === 0) {
-    lines.push("No patches found.");
+    lines.push(gray("No patches found."));
     return lines.join("\n");
   }
 
   for (const patch of result.patches) {
-    const icon = patch.status === "current" ? "✓" : patch.status === "drifted" ? "⚠" : patch.status === "upstreamed" ? "✓" : "?";
-    lines.push(`${icon} ${patch.patchId}`);
-    lines.push(`   status:     ${patch.status}`);
-    lines.push(`   realized:   ${patch.lastRealizedSha ? shortSha(patch.lastRealizedSha) : "(not yet realized)"}`);
-    lines.push(`   target_area: [${patch.targetArea.join(", ")}]`);
+    const icon =
+      patch.status === "current" ? ok()
+      : patch.status === "drifted" ? warn()
+      : patch.status === "upstreamed" ? magenta("↑")
+      : gray("?");
+    lines.push(`${icon} ${bold(patch.patchId)}`);
+    lines.push(`   status:     ${statusBadge(patch.status)}`);
+    lines.push(`   realized:   ${patch.lastRealizedSha ? paintSha(shortSha(patch.lastRealizedSha)) : gray("(not yet realized)")}`);
+    lines.push(`   target_area: ${dim(`[${patch.targetArea.join(", ")}]`)}`);
 
     // Show upstream PR tracking info
     if (patch.appliedUpstreamPr) {
       const prState = patch.appliedUpstreamPr.state;
-      const prIcon = prState === "merged" ? "✓ merged" : prState === "open" ? "⏳ open" : "✗ closed";
-      lines.push(`   upstream PR: #${patch.appliedUpstreamPr.number} (${prIcon})`);
+      const prIcon =
+        prState === "merged" ? `${ok()} ${green("merged")}`
+        : prState === "open" ? `${warn()} ${yellow("open")}`
+        : `${fail()} ${red("closed")}`;
+      lines.push(`   upstream PR: #${bold(String(patch.appliedUpstreamPr.number))} (${prIcon})`);
     }
 
     if (patch.status === "drifted") {
-      lines.push(`   changed:    ${patch.filesChangedInTargetArea.join(", ")}`);
+      const changed = patch.filesChangedInTargetArea.join(", ");
+      const colored = changed === "(imported — needs first realization)" ? yellow(changed) : cyan(changed);
+      lines.push(`   changed:    ${colored}`);
     } else if (patch.status === "current" && patch.upstreamChanged) {
-      lines.push(`   skip:       target_area untouched (0 tokens)`);
+      lines.push(`   skip:       ${meta("target_area untouched (0 tokens)")}`);
     }
     lines.push("");
   }
 
-  lines.push(`Summary: ${result.summary.total} patches, ${result.summary.current} current, ${result.summary.drifted} drifted`);
+  lines.push(
+    `Summary: ${bold(String(result.summary.total))} patches, ` +
+      `${green(String(result.summary.current))} current, ` +
+      `${result.summary.drifted > 0 ? red(String(result.summary.drifted)) : String(result.summary.drifted)} drifted`,
+  );
   if (result.summary.wouldSkip > 0) {
-    lines.push(`         ${result.summary.wouldSkip} would be skipped (target_area untouched)`);
+    lines.push(`         ${meta(`${result.summary.wouldSkip} would be skipped (target_area untouched)`)}`);
   }
 
   if (result.summary.drifted > 0) {
-    lines.push(`\nAction: ${result.summary.drifted} patch(es) need re-derivation.`);
+    lines.push(`\n${warn()} ${yellow(`${result.summary.drifted} patch(es) need re-derivation.`)}`);
   } else {
-    lines.push(`\nAll patches current. No action needed.`);
+    lines.push(`\n${ok()} ${green("All patches current. No action needed.")}`);
   }
 
   return lines.join("\n");

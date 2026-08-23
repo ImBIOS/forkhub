@@ -15,35 +15,100 @@ import { runPublish } from "./publish";
 import { runList, formatListResult } from "./list";
 import { runPrStatus, formatPrStatus } from "./pr-status";
 import { runCleanup, formatCleanup } from "./cleanup";
+import {
+  bold,
+  dim,
+  gray,
+  red,
+  green,
+  yellow,
+  cyan,
+  ok,
+  fail,
+  warn,
+  info,
+  cmd,
+  filePath,
+  url,
+  sha,
+  refName,
+  meta,
+  kv,
+  errPrefix,
+  heading,
+  highlightCmds,
+  setColorsEnabled,
+} from "./style";
 
-const HELP = `fh (forkhub) — keep up-to-date upstream + your custom patches
+function pad(s: string, n: number): string {
+  return s.length >= n ? s : s + " ".repeat(n - s.length);
+}
 
-Usage:
-  fh init [--target <repo>]              Set up .forkhub repo
-  fh draft "<intent>"                    Create a draft branch for a new patch
-  fh satisfied [--skip-port]             Finalize intent, port to forkhub/main
-  fh pr [--draft] [--base <branch>]      Push current branch + open PR to upstream
-  fh publish [--message <msg>]           Push .forkhub repo to your public GitHub repo
-  fh import <url> [--force]              Import a patch from another user's .forkhub
-  fh search [query] [--target <repo>]    Search GitHub for patches
-  fh re-derive <patch-id> [--force]      Generate re-derivation context bundle
-  fh apply <bundle-path>                 Apply realization from context bundle
-  fh drift-check                         Check if patches need re-derivation
-  fh watch [--once] [--interval <sec>] [--agent <name>]
-                                         Daemon: auto-detect drift + generate bundles
-  fh update [--tag <tag>] [--dry-run]    Update to latest (or specified) tag
-  fh rollback                            Roll back to the previous tag
-  fh status                              Show current state
-  fh list [--target <repo>]              List all intent-patches on this machine (global)
-  fh patches                             Alias for 'fh list'
-  fh pr-status [patch-id] [--target <repo>]  Check upstream PR/issue status (uses gh)
-  fh cleanup [--apply] [--dry-run] [--target <repo>]  Auto-remove upstreamed patches, switch to official release
-  fh --help                              Show this help
+type HelpRow = [command: string, description: string];
 
-Producer commands run from inside your fork's checkout.
-Consumer commands (update, rollback, status) also run from the fork checkout.
-The \`pr\` command requires a fork setup (separate \`upstream\` and \`origin\` remotes).
-`;
+const COMMAND_ROWS: HelpRow[] = [
+  ["init [--target <repo>]", "Set up .forkhub repo"],
+  ['draft "<intent>"', "Create a draft branch for a new patch"],
+  ["satisfied [--skip-port]", "Finalize intent, port to forkhub/main"],
+  ["pr [--draft] [--base <branch>]", "Push current branch + open PR to upstream"],
+  ["publish [--message <msg>]", "Push .forkhub repo to your public GitHub repo"],
+  ["import <url> [--force]", "Import a patch from another user's .forkhub"],
+  ["search [query] [--target <repo>]", "Search GitHub for patches"],
+  ["re-derive <patch-id> [--force]", "Generate re-derivation context bundle"],
+  ["apply <bundle-path>", "Apply realization from context bundle"],
+  ["drift-check", "Check if patches need re-derivation"],
+  ["watch [--once] [--interval <sec>] [--agent <name>]", "Daemon: auto-detect drift + generate bundles"],
+  ["update [--tag <tag>] [--dry-run]", "Update to latest (or specified) tag"],
+  ["rollback", "Roll back to the previous tag"],
+  ["status", "Show current state"],
+  ["list | patches [--target <repo>]", "List all intent-patches on this machine (global)"],
+  ["pr-status [patch-id] [--target <repo>]", "Check upstream PR/issue status (uses gh)"],
+  ["cleanup [--apply] [--dry-run] [--target <repo>]", "Auto-remove upstreamed patches, switch to official release"],
+];
+
+const FLAG_ROWS: HelpRow[] = [
+  ["--help, -h", "Show this help"],
+  ["--no-color", "Disable colored output"],
+  ["--color", "Force colored output (also FORCE_COLOR=1)"],
+];
+
+function renderHelp(): string {
+  const lines: string[] = [];
+  const nameWidth = Math.max(...COMMAND_ROWS.map(([c]) => c.length), ...FLAG_ROWS.map(([c]) => c.length)) + 2;
+
+  lines.push(`  ${bold(green("fh"))} ${dim("·")} ${bold("forkhub")}`);
+  lines.push(`  ${gray("Keep up-to-date upstream + your custom patches. Patches are intent, not diffs.")}`);
+  lines.push("");
+  lines.push(`${heading("Usage")} ${dim("fh <command> [flags]")}`);
+  lines.push("");
+  lines.push(heading("Commands"));
+  for (const [c, d] of COMMAND_ROWS) {
+    const rawPad = pad(c, nameWidth);
+    const idx = c.indexOf(" ");
+    let styled: string;
+    if (idx === -1) styled = cyan(c);
+    else styled = `${cyan(c.slice(0, idx))} ${dim(c.slice(idx + 1))}`;
+    const ansiExtra = styled.length - c.length;
+    const padCount = Math.max(0, nameWidth - c.length);
+    styled = `${styled}${" ".repeat(padCount)}`;
+    void ansiExtra;
+    void rawPad;
+    lines.push(`  ${styled}${d}`);
+  }
+  lines.push("");
+  lines.push(heading("Flags"));
+  for (const [f, d] of FLAG_ROWS) {
+    const padCount = Math.max(0, nameWidth - f.length);
+    lines.push(`  ${dim(f)}${" ".repeat(padCount)}${d}`);
+  }
+  lines.push("");
+  lines.push(gray("Producer commands run from inside your fork's checkout."));
+  lines.push(highlightCmds(gray("Consumer commands (update, rollback, status) also run from the fork checkout.")));
+  lines.push(gray("The `pr` command requires a fork setup (separate `upstream` and `origin` remotes)."));
+  return lines.join("\n");
+}
+
+const HELP = renderHelp();
 
 function parseArgs(argv: string[]): { command?: string; opts: Record<string, string | boolean>; positional: string[] } {
   const [command, ...rest] = argv;
@@ -70,31 +135,37 @@ function parseArgs(argv: string[]): { command?: string; opts: Record<string, str
 async function runStatus() {
   const { isGitRepo, currentSha, currentTag, listTags } = await import("./git");
   if (!(await isGitRepo())) {
-    console.error("Not a git repository.");
+    console.error(`${errPrefix()} Not a git repository.`);
     process.exit(1);
   }
-  const sha = await currentSha();
+  const shaStr = await currentSha();
   const tag = await currentTag();
   const tags = await listTags();
 
-  console.log(`Current:  ${tag ?? "(detached)"} ${sha.slice(0, 7)}`);
+  console.log(`${kv("Current:", 10)}${tag ? refName(tag) : gray("(detached)")} ${sha(shaStr.slice(0, 7))}`);
   const latest = tags[0];
   if (latest) {
-    console.log(`Latest:   ${latest.name} ${latest.sha.slice(0, 7)}`);
-    if (latest.sha !== sha) {
-      console.log(`\nRun \`fh update\` to advance.`);
+    console.log(`${kv("Latest:", 10)}${refName(latest.name)} ${sha(latest.sha.slice(0, 7))}`);
+    if (latest.sha !== shaStr) {
+      console.log(`\n${highlightCmds(gray(`Run \`fh update\` to advance.`))}`);
     } else {
-      console.log(`\nAlready at latest.`);
+      console.log(`\n${ok()} ${green("Already at latest.")}`);
     }
   } else {
-    console.log(`\nNo forkhub tags found.`);
+    console.log(`\n${warn()} No forkhub tags found.`);
   }
 }
 
 async function main() {
+  // global color flags (before anything prints)
+  const hasNoColor = process.argv.includes("--no-color");
+  const hasColor = process.argv.includes("--color");
+  if (hasNoColor) setColorsEnabled(false);
+  else if (hasColor) setColorsEnabled(true);
+
   const { command, opts, positional } = parseArgs(process.argv.slice(2));
 
-  if (!command || command === "--help" || command === "-h") {
+  if (!command || command === "--help" || command === "-h" || command === "help") {
     console.log(HELP);
     return;
   }
@@ -108,16 +179,16 @@ async function main() {
         if (typeof opts.target === "string") initOpts.target = opts.target;
 
         const result = await runInit(initOpts);
-        console.log(`Target repo:     ${result.targetRepo}`);
-        console.log(`Upstream remote: ${result.upstreamRemote} (${result.upstreamUrl})`);
+        console.log(`${kv("Target repo:", 17)}${cyan(result.targetRepo)}`);
+        console.log(`${kv("Upstream remote:", 17)}${result.upstreamRemote} ${gray(`(${result.upstreamUrl})`)}`);
         if (result.isFork && result.forkRemote) {
-          console.log(`Fork remote:     ${result.forkRemote} (${result.forkUrl})`);
-          console.log(`Setup:           FORK — track drift on upstream, push PRs from ${result.forkRemote}`);
+          console.log(`${kv("Fork remote:", 17)}${result.forkRemote} ${gray(`(${result.forkUrl})`)}`);
+          console.log(`${kv("Setup:", 17)}${green("FORK")} ${dim(`— track drift on upstream, push PRs from`)} ${result.forkRemote}`);
         } else {
-          console.log(`Setup:           SINGLE-REMOTE — no fork detected`);
+          console.log(`${kv("Setup:", 17)}${yellow("SINGLE-REMOTE")} ${dim("— no fork detected")}`);
         }
-        console.log(`.forkhub:    ${result.forkhubDir}`);
-        console.log(result.created ? "Created new .forkhub repo." : "Existing .forkhub repo configured.");
+        console.log(`${kv(".forkhub:", 17)}${filePath(result.forkhubDir)}`);
+        console.log(result.created ? `${ok()} Created new .forkhub repo.` : `${ok()} Existing .forkhub repo configured.`);
         break;
       }
 
@@ -127,12 +198,12 @@ async function main() {
           throw new Error("Intent description required. Usage: fh draft \"<intent>\"");
         }
         const result = await runDraft(intent);
-        console.log(`Branch:    ${result.branch}`);
-        console.log(`Slug:      ${result.slug}`);
-        console.log(`Base:      ${result.baseSha.slice(0, 7)}`);
-        console.log(`Draft:     ${result.draftFile}`);
-        console.log(`\nImplement your patch on branch '${result.branch}'.`);
-        console.log(`When done, run: fh satisfied`);
+        console.log(`${kv("Branch:", 11)}${refName(result.branch)}`);
+        console.log(`${kv("Slug:", 11)}${result.slug}`);
+        console.log(`${kv("Base:", 11)}${sha(result.baseSha.slice(0, 7))}`);
+        console.log(`${kv("Draft:", 11)}${filePath(result.draftFile)}`);
+        console.log(`\n${highlightCmds(gray(`Implement your patch on branch '${result.branch}'.`))}`);
+        console.log(`${highlightCmds(gray(`When done, run: \`fh satisfied\``))}`);
         break;
       }
 
@@ -141,16 +212,16 @@ async function main() {
         if (opts["skip-port"] === true) satisfiedOpts.skipPort = true;
 
         const result = await runSatisfied(satisfiedOpts);
-        console.log(`Patch ID:       ${result.patchId}`);
-        console.log(`Branch:         ${result.branch}`);
-        console.log(`Files changed:  ${result.filesChanged.join(", ") || "(none)"}`);
+        console.log(`${kv("Patch ID:", 16)}${cyan(result.patchId)}`);
+        console.log(`${kv("Branch:", 16)}${refName(result.branch)}`);
+        console.log(`${kv("Files changed:", 16)}${result.filesChanged.join(", ") || gray("(none)")}`);
         if (result.forkhubMainUpdated) {
-          console.log(`Ported to:      forkhub/main`);
-          if (result.tag) console.log(`Tag:            ${result.tag}`);
+          console.log(`${kv("Ported to:", 16)}${refName("forkhub/main")}`);
+          if (result.tag) console.log(`${kv("Tag:", 16)}${refName(result.tag)}`);
         } else {
-          console.log(`Port:           skipped`);
+          console.log(`${kv("Port:", 16)}${yellow("skipped")}`);
         }
-        console.log(`\nIntent saved to .forkhub.`);
+        console.log(`\n${ok()} ${highlightCmds(gray("Intent saved to `.forkhub`."))}`);
         break;
       }
 
@@ -163,21 +234,21 @@ async function main() {
         const result = await runUpdate(updateOpts);
 
         if (result.skipped) {
-          console.log(`Already at ${result.to} (${result.from.slice(0, 7)}). Nothing to do.`);
+          console.log(`${ok()} Already at ${refName(result.to)} ${gray(`(${sha(result.from.slice(0, 7))})`)}. Nothing to do.`);
           return;
         }
 
         if (opts["dry-run"]) {
-          console.log(`[dry-run] Would update ${result.from.slice(0, 7)} → ${result.to} (${result.toSha.slice(0, 7)})`);
+          console.log(`${warn("[dry-run]")} Would update ${sha(result.from.slice(0, 7))} → ${refName(result.to)} ${gray(`(${sha(result.toSha.slice(0, 7))})`)}`);
           return;
         }
 
-        console.log(`Updated ${result.from.slice(0, 7)} → ${result.to} (${result.toSha.slice(0, 7)})`);
+        console.log(`${ok()} Updated ${sha(result.from.slice(0, 7))} → ${refName(result.to)} ${gray(`(${sha(result.toSha.slice(0, 7))})`)}`);
         if (result.stashed) {
           if (result.stashRestored) {
-            console.log(`Local changes restored from stash.`);
+            console.log(`  ${ok()} Local changes restored from stash.`);
           } else {
-            console.warn(`Local changes could not be restored (conflicts). See \`git stash list\`.`);
+            console.warn(`  ${warn()} ${yellow("Local changes could not be restored (conflicts).")} See ${cmd("`git stash list`")}.`);
           }
         }
         break;
@@ -190,9 +261,9 @@ async function main() {
 
         const result = await runRollback(rollbackOpts);
         if (result.skipped) {
-          console.log(`Already at ${result.to}. Nothing to do.`);
+          console.log(`${ok()} Already at ${refName(result.to)}. Nothing to do.`);
         } else {
-          console.log(`Rolled back ${result.from} → ${result.to} (${result.toSha.slice(0, 7)})`);
+          console.log(`${ok()} Rolled back ${sha(result.from)} → ${refName(result.to)} ${gray(`(${sha(result.toSha.slice(0, 7))})`)}`);
         }
         break;
       }
@@ -238,11 +309,11 @@ async function main() {
         if (opts.force === true) importOpts.force = true;
 
         const result = await runImport(source, importOpts);
-        console.log(`Patch ID:     ${result.patchId}`);
-        console.log(`Target repo:  ${result.targetRepo}`);
-        console.log(`Author:       ${result.author}`);
-        console.log(`Files:        ${result.filesImported.join(", ")}`);
-        console.log(`\nPatch imported. Run \`fh drift-check\` to see if re-derivation is needed.`);
+        console.log(`${kv("Patch ID:", 14)}${cyan(result.patchId)}`);
+        console.log(`${kv("Target repo:", 14)}${cyan(result.targetRepo)}`);
+        console.log(`${kv("Author:", 14)}${result.author}`);
+        console.log(`${kv("Files:", 14)}${result.filesImported.join(", ") || gray("(none)")}`);
+        console.log(`\n${ok()} Patch imported. ${highlightCmds(gray("Run `fh drift-check` to see if re-derivation is needed."))}`);
         break;
       }
 
@@ -256,20 +327,20 @@ async function main() {
 
         const result = await runReDerive(patchId, reDeriveOpts);
         if (result.status === "current" && !opts.force) {
-          console.log(`Patch ${result.patchId} is already current. No re-derivation needed.`);
-          console.log(`Use --force to re-derive anyway.`);
+          console.log(`${ok()} Patch ${cyan(result.patchId)} is ${green("current")}. No re-derivation needed.`);
+          console.log(`  ${meta("Use --force to re-derive anyway.")}`);
           break;
         }
-        console.log(`Patch ID:    ${result.patchId}`);
-        console.log(`Bundle:      ${result.bundlePath}`);
-        console.log(`Status:      ${result.status}`);
-        console.log(`\nBundle contents (${result.filesInBundle.length} files):`);
+        console.log(`${kv("Patch ID:", 13)}${cyan(result.patchId)}`);
+        console.log(`${kv("Bundle:", 13)}${filePath(result.bundlePath)}`);
+        console.log(`${kv("Status:", 13)}${result.status === "current" ? green(result.status) : yellow(result.status)}`);
+        console.log(`\n${bold(`Bundle contents (${result.filesInBundle.length} files):`)}`);
         for (const f of result.filesInBundle) {
-          console.log(`  - ${f}`);
+          console.log(`  ${dim("-")} ${f}`);
         }
-        console.log(`\nNext steps:`);
-        console.log(`  1. Have an AI agent re-derive the patch and save to REALIZATION/realization.diff`);
-        console.log(`  2. Run: fh apply ${result.bundlePath}`);
+        console.log(`\n${bold("Next steps:")}`);
+        console.log(`  ${dim("1.")} Have an AI agent re-derive the patch and save to ${cmd("REALIZATION/realization.diff")}`);
+        console.log(`  ${dim("2.")} Run: ${cmd(`fh apply ${result.bundlePath}`)}`);
         break;
       }
 
@@ -283,14 +354,16 @@ async function main() {
         if (opts["skip-tag"] === true) applyOpts.skipTag = true;
 
         const result = await runApply(bundlePath, applyOpts);
-        console.log(`Patch ID:    ${result.patchId}`);
-        console.log(`Bundle:      ${result.bundlePath}`);
-        console.log(`Diff applied: ${result.diffApplied ? "yes" : "no"}`);
-        console.log(`Tests pass:   ${result.testsPass ? "yes" : "no"}`);
-        if (result.tag) console.log(`Tag:          ${result.tag}`);
+        console.log(`${kv("Patch ID:", 14)}${cyan(result.patchId)}`);
+        console.log(`${kv("Bundle:", 14)}${filePath(result.bundlePath)}`);
+        console.log(`${kv("Diff applied:", 14)}${result.diffApplied ? green("yes") : red("no")}`);
+        console.log(`${kv("Tests pass:", 14)}${result.testsPass ? green("yes") : red("no")}`);
+        if (result.tag) console.log(`${kv("Tag:", 14)}${refName(result.tag)}`);
         if (result.errors.length > 0) {
-          console.log(`\nErrors:`);
-          for (const err of result.errors) console.log(`  - ${err}`);
+          console.log(`\n${red(bold("Errors:"))}`);
+          for (const err of result.errors) console.log(`  ${fail()} ${err}`);
+        } else {
+          console.log(`\n${ok()} ${green("Patch applied.")}`);
         }
         break;
       }
@@ -304,17 +377,17 @@ async function main() {
         if (opts["no-push"] === true) prOpts.noPush = true;
 
         const result = await runPr(prOpts);
-        console.log(`Branch:    ${result.branch}`);
-        console.log(`Pushed:    ${result.pushedTo}`);
+        console.log(`${kv("Branch:", 11)}${refName(result.branch)}`);
+        console.log(`${kv("Pushed:", 11)}${result.pushedTo}`);
         if (result.prUrl) {
-          console.log(`PR:        ${result.prUrl}`);
-          console.log(`PR #:      ${result.prNumber}`);
-          console.log(`\nPR created/updated. Manifest updated.`);
+          console.log(`${kv("PR:", 11)}${url(result.prUrl)}`);
+          console.log(`${kv("PR #:", 11)}${bold(`#${result.prNumber}`)}`);
+          console.log(`\n${ok()} PR created/updated. Manifest updated.`);
         } else if (result.error) {
-          console.error(`gh pr create failed: ${result.error}`);
-          console.error(`\nYou can still push the branch manually:`);
-          console.error(`  git push -u <fork-remote> ${result.branch}`);
-          console.error(`Then open the PR at: https://github.com/<owner>/<repo>/compare/${result.branch}`);
+          console.error(`${fail()} gh pr create failed: ${result.error}`);
+          console.error(`\n${gray("You can still push the branch manually:")}`);
+          console.error(`  ${cmd(`git push -u <fork-remote> ${result.branch}`)}`);
+          console.error(`${gray("Then open the PR at:")} https://github.com/<owner>/<repo>/compare/${result.branch}`);
         }
         break;
       }
@@ -326,13 +399,13 @@ async function main() {
 
         const result = await runPublish(pubOpts);
         if (result.pushed) {
-          console.log(`Pushed:    ${result.commitSha} → ${result.remote}`);
-          console.log(`Files:     ${result.filesStaged} staged`);
-          console.log(`Message:   ${result.commitMessage}`);
-          console.log(`\nPatch intents published. Other users can import via:`);
-          console.log(`  fh import https://github.com/<user>/.forkhub/...`);
+          console.log(`${kv("Pushed:", 11)}${sha(result.commitSha)} ${dim("→")} ${result.remote}`);
+          console.log(`${kv("Files:", 11)}${bold(String(result.filesStaged))} staged`);
+          console.log(`${kv("Message:", 11)}${result.commitMessage}`);
+          console.log(`\n${ok()} Patch intents published. Other users can import via:`);
+          console.log(`  ${cmd("fh import https://github.com/<user>/.forkhub/...")}`);
         } else {
-          console.log(`Nothing to publish. Latest commit: ${result.commitSha}`);
+          console.log(`${info()} Nothing to publish. Latest commit: ${sha(result.commitSha)}`);
         }
         break;
       }
@@ -341,7 +414,7 @@ async function main() {
       case "patches": {
         const listOpts: { targetRepo?: string } = {};
         if (typeof opts.target === "string") listOpts.targetRepo = opts.target;
-        const result = await runList(listOpts);
+        const result = await runList({});
         // filter if target given
         if (listOpts.targetRepo) {
           result.repos = result.repos.filter((r) => r.targetRepo === listOpts.targetRepo);
@@ -375,13 +448,13 @@ async function main() {
       }
 
       default:
-        console.error(`Unknown command: ${command}\n`);
+        console.error(`${errPrefix()} Unknown command: ${bold(command ?? "")}\n`);
         console.log(HELP);
         process.exit(1);
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error(`Error: ${message}`);
+    console.error(`${errPrefix()} ${message}`);
     process.exit(1);
   }
 }

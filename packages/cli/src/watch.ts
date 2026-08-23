@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { isGitRepo, gitExec } from "./git";
 import { runDriftCheck, formatDriftCheckResult, type DriftCheckResult } from "./drift-check";
+import { bold, dim, green, yellow, red, cyan, gray, ok, fail, warn, pending, meta } from "./style";
 
 export type WatchOptions = {
   forkhubDir?: string;
@@ -80,21 +81,21 @@ const AGENTS: Record<string, AgentCommand> = {
 async function invokeAgent(agentName: string, bundlePath: string, patchId: string): Promise<void> {
   const agent = AGENTS[agentName];
   if (!agent) {
-    console.error(`\n✗ Unknown agent: ${agentName}. Available: ${Object.keys(AGENTS).join(", ")}`);
+    console.error(`\n${fail()} Unknown agent: ${bold(agentName)}. Available: ${cyan(Object.keys(AGENTS).join(", "))}`);
     return;
   }
 
   const promptPath = `${bundlePath}/prompt.md`;
   const realizationPath = `${bundlePath}/REALIZATION/realization.diff`;
 
-  console.log(`\n🤖 Invoking ${agentName} on bundle for ${patchId}...`);
+  console.log(`\n🤖 ${bold("Invoking")} ${cyan(agentName)} on bundle for ${patchId}...`);
 
   try {
     const proc = Bun.spawn([agent.command, ...agent.argsForBundle(bundlePath, promptPath)], {
       stdout: "pipe",
       stderr: "pipe",
     });
-    const [stdout, stderr] = await Promise.all([
+    const [, stderr] = await Promise.all([
       new Response(proc.stdout).text(),
       new Response(proc.stderr).text(),
     ]);
@@ -102,15 +103,15 @@ async function invokeAgent(agentName: string, bundlePath: string, patchId: strin
     if (exitCode === 0) {
       const fs = await import("node:fs");
       if (fs.existsSync(realizationPath)) {
-        console.log(`✅ ${agentName} produced realization`);
+        console.log(`${ok()} ${agentName} produced realization`);
       } else {
-        console.log(`⚠ ${agentName} exited 0 but no realization.diff was produced`);
+        console.log(`${warn()} ${yellow(`${agentName} exited 0 but no realization.diff was produced`)}`);
       }
     } else {
-      console.error(`✗ ${agentName} failed (exit ${exitCode}): ${stderr.slice(0, 200)}`);
+      console.error(`${fail()} ${agentName} failed (exit ${exitCode}): ${red(stderr.slice(0, 200))}`);
     }
   } catch (err) {
-    console.error(`✗ Could not invoke ${agentName}: ${err instanceof Error ? err.message : err}`);
+    console.error(`${fail()} Could not invoke ${agentName}: ${err instanceof Error ? err.message : err}`);
   }
 }
 
@@ -131,9 +132,9 @@ export async function runWatch(options: WatchOptions = {}): Promise<void> {
   do {
     iteration++;
     const now = new Date();
-    console.log(`\n${"=".repeat(60)}`);
-    console.log(`  forkhub watch — iteration ${iteration} — ${now.toISOString()}`);
-    console.log(`${"=".repeat(60)}\n`);
+    console.log(`\n${gray("=".repeat(60))}`);
+    console.log(`  ${bold(green("forkhub watch"))} ${dim(`— iteration ${iteration}`)} ${dim(`— ${now.toISOString()}`)}`);
+    console.log(`${gray("=".repeat(60))}\n`);
 
     const driftResult = await runDriftCheck({ forkhubDir });
     console.log(formatDriftCheckResult(driftResult));
@@ -143,9 +144,9 @@ export async function runWatch(options: WatchOptions = {}): Promise<void> {
     const driftedPatches = driftResult.patches.filter((p) => p.status === "drifted");
 
     if (driftedPatches.length === 0 && state.bundles.length === 0) {
-      console.log(`\n✓ All patches current. Nothing to do.`);
+      console.log(`\n${ok()} ${green("All patches current. Nothing to do.")}`);
       if (!options.once) {
-        console.log(`  Next check in ${intervalMs / 1000}s...`);
+        console.log(`  ${meta(`Next check in ${intervalMs / 1000}s...`)}`);
       }
     } else {
       for (const patch of driftedPatches) {
@@ -164,8 +165,8 @@ export async function runWatch(options: WatchOptions = {}): Promise<void> {
               generatedAt: now.toISOString(),
               status: "pending",
             });
-            console.log(`\n📦 Bundle generated for ${patch.patchId}`);
-            console.log(`   ${bundleResult.bundlePath}`);
+            console.log(`\n📦 ${bold("Bundle generated for")} ${cyan(patch.patchId)}`);
+            console.log(`   ${gray(bundleResult.bundlePath)}`);
 
             if (agent) {
               await invokeAgent(agent, bundleResult.bundlePath, patch.patchId);
@@ -173,7 +174,7 @@ export async function runWatch(options: WatchOptions = {}): Promise<void> {
           }
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
-          console.error(`\n⚠ Could not generate bundle for ${patch.patchId}: ${msg}`);
+          console.error(`\n${warn()} ${yellow(`Could not generate bundle for ${patch.patchId}:`)} ${msg}`);
         }
       }
 
@@ -190,16 +191,16 @@ export async function runWatch(options: WatchOptions = {}): Promise<void> {
           continue;
         }
 
-        console.log(`\n🔧 AI realization found for ${bundle.patchId}. Applying...`);
+        console.log(`\n🔧 ${bold("AI realization found for")} ${cyan(bundle.patchId)}. Applying...`);
         const applyOutcome = await applyBundle(bundle.bundlePath, forkhubDir);
         if (applyOutcome.success) {
           bundle.status = "applied";
-          console.log(`✅ ${bundle.patchId} applied successfully!`);
+          console.log(`${ok()} ${green(`${bundle.patchId} applied successfully!`)}`);
           if (applyOutcome.tag) console.log(`   Tagged: ${applyOutcome.tag}`);
         } else {
           bundle.status = "failed";
-          console.error(`❌ ${bundle.patchId} apply failed:`);
-          for (const err of applyOutcome.errors) console.error(`   ${err}`);
+          console.error(`${fail()} ${red(`${bundle.patchId} apply failed:`)}`);
+          for (const err of applyOutcome.errors) console.error(`   ${red(err)}`);
           stillPending.push(bundle);
         }
       }
@@ -211,12 +212,12 @@ export async function runWatch(options: WatchOptions = {}): Promise<void> {
     await saveWatchState(forkhubDir, state);
 
     if (state.bundles.length > 0) {
-      console.log(`\n⏳ ${state.bundles.length} bundle(s) awaiting AI realization:`);
+      console.log(`\n${pending()} ${bold(`${state.bundles.length} bundle(s) awaiting AI realization:`)}`);
       for (const b of state.bundles) {
         const hasRealization = await checkBundleComplete(b.bundlePath);
-        const icon = hasRealization ? "🔧" : "⏳";
-        console.log(`   ${icon} ${b.patchId}`);
-        console.log(`      ${b.bundlePath}`);
+        const icon = hasRealization ? "🔧" : pending();
+        console.log(`   ${icon} ${cyan(b.patchId)}`);
+        console.log(`      ${gray(b.bundlePath)}`);
       }
       console.log(`\n   To process: run /forkhub in your AI agent,`);
       console.log(`   or manually edit REALIZATION/realization.diff in the bundle.`);
@@ -227,7 +228,7 @@ export async function runWatch(options: WatchOptions = {}): Promise<void> {
       break;
     }
 
-    console.log(`\n  Sleeping ${intervalMs / 1000}s...\n`);
+    console.log(`\n  ${meta(`Sleeping ${intervalMs / 1000}s...`)}\n`);
     await sleep(intervalMs);
   } while (!options.once);
 }

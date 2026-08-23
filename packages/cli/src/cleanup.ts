@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import { gitExec, gitOrThrow, isGitRepo, currentBranch } from "./git";
 import { runDriftCheck } from "./drift-check";
+import { bold, green, yellow, red, cyan, gray, ok, warn, statusBadge, cmd, meta } from "./style";
 
 export type CleanupOptions = {
   forkhubDir?: string;
@@ -284,20 +285,31 @@ export function formatCleanup(results: CleanupResult[], opts: CleanupOptions = {
   }
   const toRemove = results.filter((r) => r.action === "would_remove" || r.action === "removed");
   const skipped = results.filter((r) => r.action === "skipped");
-  lines.push(`Checked ${results.length} patch(es): ${toRemove.length} upstreamed, ${skipped.length} still needed\n`);
+  lines.push(
+    `Checked ${bold(String(results.length))} patch(es): ` +
+      `${toRemove.length > 0 ? red(String(toRemove.length)) : green("0")} upstreamed, ` +
+      `${skipped.length} still needed\n`,
+  );
   for (const r of results) {
-    const icon = r.action === "removed" ? "✓ removed" : r.action === "would_remove" ? "⏳ would remove" : r.action === "skipped" ? "— keep" : "?";
-    lines.push(`${icon} ${r.targetRepo} :: ${r.patchId} [${r.status}${r.prState ? `, PR #${r.prNumber} ${r.prState}` : ""}]`);
-    for (const d of r.details) lines.push(`    ${d}`);
+    const icon =
+      r.action === "removed" ? `${ok()} ${green("removed")}`
+      : r.action === "would_remove" ? `${warn()} ${yellow("would remove")}`
+      : r.action === "skipped" ? `${gray("—")} keep`
+      : gray("?");
+    lines.push(`${icon}  ${cyan(r.targetRepo)} ${gray("::")} ${bold(r.patchId)} ${statusBadge(r.status)}${r.prState ? ` PR #${bold(String(r.prNumber))} ${r.prState}` : ""}`);
+    for (const d of r.details) lines.push(`    ${meta(d)}`);
     lines.push("");
   }
   if (toRemove.length > 0 && !opts.apply) {
-    lines.push(`Run \`fh cleanup --apply\` inside the repo (or \`fh cleanup --apply --target ${toRemove[0].targetRepo}\`) to auto-remove and switch to official release.`);
-    lines.push(`This will: remove patch from manifest, delete patch dir, checkout main → upstream/main, and clean wrapper ~/.local/bin/opencode-clean if present.`);
+    {
+      const first = toRemove[0]!;
+      lines.push(`Run ${cmd("`fh cleanup --apply`")} inside the repo (or ${cmd(`\`fh cleanup --apply --target ${first.targetRepo}\``)}) to auto-remove and switch to official release.`);
+    }
+    lines.push(meta("This will: remove patch from manifest, delete patch dir, checkout main → upstream/main, and clean wrapper ~/.local/bin/opencode-clean if present."));
   } else if (toRemove.length > 0 && opts.apply) {
-    lines.push(`Cleanup applied. Verify with \`fh status\` and \`fh drift-check\`, and \`fh list\` should no longer show the upstreamed patch.`);
+    lines.push(`${ok()} ${green("Cleanup applied.")} Verify with ${cmd("`fh status`")} and ${cmd("`fh drift-check`")}, and ${cmd("`fh list`")} should no longer show the upstreamed patch.`);
   } else {
-    lines.push(`All patches still needed. No action.`);
+    lines.push(`${ok()} All patches still needed. No action.`);
   }
   return lines.join("\n");
 }

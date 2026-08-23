@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
+import { bold, green, red, yellow, cyan, gray, ok, fail, pending, url as link, meta, highlightCmds } from "./style";
 
 export type PrStatusOptions = {
   forkhubDir?: string;
@@ -81,12 +82,12 @@ function parseIntentPr(intentPath: string): { prNumber?: number; prUrl?: string;
   const prUrlMatch = c.match(/url:\s*(https:\/\/github\.com\/[^\/]+\/[^\/]+\/pull\/(\d+))/m);
   if (prUrlMatch?.[1]) {
     prUrl = prUrlMatch[1];
-    if (!prNumber) prNumber = parseInt(prUrlMatch[2], 10);
+    if (!prNumber && prUrlMatch[2]) prNumber = parseInt(prUrlMatch[2], 10);
   }
   const issueMatch = c.match(/issue:\s*(https:\/\/github\.com\/[^\/]+\/[^\/]+\/issues\/(\d+))/m);
   if (issueMatch?.[1]) {
     issueUrl = issueMatch[1];
-    issueNumber = parseInt(issueMatch[2], 10);
+    if (issueMatch[2]) issueNumber = parseInt(issueMatch[2], 10);
   }
   // also check issue_number: 7754
   const issueNumMatch = c.match(/issue_number:\s*(\d+)/m);
@@ -184,25 +185,32 @@ export async function runPrStatus(options: PrStatusOptions = {}): Promise<PrStat
 export function formatPrStatus(results: PrStatusEntry[]): string {
   const lines: string[] = [];
   for (const r of results) {
-    lines.push(`• ${r.targetRepo} :: ${r.patchId}`);
+    lines.push(`${ok("•")} ${cyan(r.targetRepo)} ${gray("::")} ${bold(r.patchId)}`);
     if (r.prNumber) {
       const state = r.prState ?? "unknown";
-      const icon = state === "merged" ? "✓ merged" : state === "open" ? "⏳ open" : state === "closed" ? "✗ closed" : "?";
-      lines.push(`  PR:       #${r.prNumber} ${r.prUrl ?? ""} → ${icon}${r.mergeCommit ? ` (${r.mergeCommit.slice(0, 7)})` : ""}`);
-      if (r.error) lines.push(`  PR error: ${r.error}`);
+      const icon =
+        state === "merged" ? `${ok()} ${green("merged")}`
+        : state === "open" ? `${pending()} ${yellow("open")}`
+        : state === "closed" ? `${fail()} ${red("closed")}`
+        : gray("?");
+      lines.push(`  PR:       #${bold(String(r.prNumber))} ${r.prUrl ? link(r.prUrl) : ""} → ${icon}${r.mergeCommit ? ` ${gray(`(${r.mergeCommit.slice(0, 7)})`)}` : ""}`);
+      if (r.error) lines.push(`  PR error: ${red(r.error)}`);
     } else {
-      lines.push(`  PR:       (not tracked) add applied_upstream_pr.number to INTENT.md`);
+      lines.push(`  PR:       ${gray("(not tracked)")}${meta(" add applied_upstream_pr.number to INTENT.md")}`);
     }
     if (r.issueNumber) {
       const istate = r.issueState ?? "unknown";
-      const iicon = istate === "closed" ? "✓ closed" : istate === "open" ? "⏳ open" : "?";
-      lines.push(`  Issue:    #${r.issueNumber} ${r.issueUrl ?? ""} → ${iicon} (${istate})`);
+      const iicon =
+        istate === "closed" ? `${ok()} ${green("closed")}`
+        : istate === "open" ? `${pending()} ${yellow("open")}`
+        : gray("?");
+      lines.push(`  Issue:    #${bold(String(r.issueNumber))} ${r.issueUrl ? link(r.issueUrl) : ""} → ${iicon} ${gray(`(${istate})`)}`);
     }
     if (r.prState === "merged") {
-      lines.push(`  Action:   PR merged → safe to \`fh cleanup --apply\` to drop self-patched build and use official release`);
-      lines.push(`            (fh will checkout upstream/main and remove patch from manifest)`);
+      lines.push(`  Action:   ${green("PR merged")} → safe to ${highlightCmds("`fh cleanup --apply`")} to drop self-patched build and use official release`);
+      lines.push(`            ${gray("(fh will checkout upstream/main and remove patch from manifest)")}`);
     } else if (r.prState === "open") {
-      lines.push(`  Action:   PR still open → keep self-patched build (forkhub/main ${r.patchId}) and wrapper ~/.local/bin/opencode-clean if on desktop 0.0.33`);
+      lines.push(`  Action:   ${yellow("PR still open")} → keep self-patched build (forkhub/main ${r.patchId}) and wrapper ~/.local/bin/opencode-clean if on desktop 0.0.33`);
     }
     lines.push("");
   }

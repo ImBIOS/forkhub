@@ -1,3 +1,5 @@
+import { bold, cyan, gray, ok, url as link } from "./style";
+
 export type SearchResult = {
   user: string;
   repo: string;
@@ -173,13 +175,13 @@ export function formatSearchResults(results: SearchResult[]): string {
   if (results.length === 0) {
     return "No patches found.\n";
   }
-  const lines: string[] = [`Found ${results.length} patch(es):\n`];
+  const lines: string[] = [`Found ${bold(String(results.length))} patch(es):\n`];
   for (const r of results) {
-    lines.push(`  ${r.patchId}`);
+    lines.push(`  ${ok("•")} ${bold(r.patchId)}`);
     lines.push(`    title:      ${r.title}`);
-    lines.push(`    author:     ${r.user}`);
-    if (r.targetRepo) lines.push(`    target:     ${r.targetRepo}`);
-    lines.push(`    import:     forkhub import ${r.url}`);
+    lines.push(`    author:     ${cyan(r.user)}`);
+    if (r.targetRepo) lines.push(`    target:     ${cyan(r.targetRepo)}`);
+    lines.push(`    import:     ${gray("forkhub import")} ${link(r.url)}`);
     lines.push("");
   }
   return lines.join("\n");

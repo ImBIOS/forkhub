@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
+import { bold, cyan, gray, dim, magenta, yellow, ok, statusBadge, filePath, url as link } from "./style";
 
 export type ListOptions = {
   forkhubDir?: string;
@@ -144,26 +145,28 @@ export async function runList(options: ListOptions = {}): Promise<ListResult> {
 export function formatListResult(result: ListResult): string {
   const lines: string[] = [];
   if (result.repos.length === 0) {
-    return "No .forkhub patches found on this machine.\nRun `fh init` + `fh draft` inside a fork to create one.";
+    return `No .forkhub patches found on this machine.\nRun ${cyan("`fh init`")} + ${cyan("`fh draft`")} inside a fork to create one.`;
   }
-  lines.push(`Found ${result.total} patch(es) across ${result.repos.length} repo(s) on this machine:\n`);
+  lines.push(`Found ${bold(String(result.total))} patch(es) across ${bold(String(result.repos.length))} repo(s) on this machine:\n`);
   for (const repo of result.repos) {
-    lines.push(`${repo.targetRepo} — ${repo.patches.length} patch(es)`);
-    lines.push(`  manifest: ${repo.manifestPath}`);
+    const count = repo.patches.length;
+    const countStr = count === 0 ? gray("0") : count > 1 ? bold(magenta(String(count))) : magenta("1");
+    lines.push(`${bold(cyan(repo.targetRepo))} ${dim("—")} ${countStr} patch(es)`);
+    lines.push(`  ${gray("manifest:")} ${filePath(repo.manifestPath)}`);
     if (repo.patches.length === 0) {
-      lines.push(`  (no patches)`);
+      lines.push(`  ${gray("(no patches)")}`);
     } else {
       for (const p of repo.patches) {
-        const prPart = p.prNumber ? ` PR #${p.prNumber}${p.prUrl ? ` (${p.prUrl})` : ""}` : "";
-        const issuePart = p.issueUrl ? ` issue ${p.issueUrl}` : "";
-        lines.push(`  • ${p.patchId}`);
+        const prPart = p.prNumber ? `  PR ${bold(`#${p.prNumber}`)}${p.prUrl ? ` (${link(p.prUrl)})` : ""}` : "";
+        const issuePart = p.issueUrl ? `  issue ${link(p.issueUrl)}` : "";
+        lines.push(`  ${ok("•")} ${bold(p.patchId)}`);
         lines.push(`    title:  ${p.title}`);
-        lines.push(`    status: ${p.status}  branch: ${p.branch}  realized: ${p.lastRealized}${prPart}${issuePart}`);
+        lines.push(`    status: ${statusBadge(p.status)}  branch: ${magenta(p.branch || "-")}  realized: ${p.lastRealized ? yellow(p.lastRealized) : gray("(none)")}${prPart}${issuePart}`);
       }
     }
     lines.push("");
   }
-  lines.push(`Use \`fh drift-check\` inside a repo, or \`fh pr-status [patch-id]\` to check upstream PR/issue,`);
-  lines.push(`and \`fh cleanup [--apply]\` to auto-remove upstreamed patches and switch to official release.`);
+  lines.push(gray("Use `fh drift-check` inside a repo, or `fh pr-status [patch-id]` to check upstream PR/issue,"));
+  lines.push(gray("and `fh cleanup [--apply]` to auto-remove upstreamed patches and switch to official release."));
   return lines.join("\n");
 }

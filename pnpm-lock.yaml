@@ -204,7 +204,7 @@ importers:
         specifier: ^2.10.2
         version: 2.10.5
       typescript:
-        specifier: ^6.0.3
+        specifier: 'catalog:'
         version: 6.0.3
 
   apps/fumadocs:
@@ -348,7 +348,7 @@ importers:
         version: 17.4.2
       evlog:
         specifier: 'catalog:'
-        version: 2.22.0(@orpc/server@1.14.8)(elysia@1.4.29(@sinclair/typebox@0.34.52)(@types/bun@1.3.14)(exact-mirror@1.2.2)(file-type@22.0.1)(openapi-types@12.1.3)(typescript@6.0.3))(express@5.2.1)(hono@4.12.31)(next@16.2.10(@babel/core@7.29.7)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(react@19.2.7)
+        version: 2.22.0(@orpc/server@1.14.8)(elysia@1.4.29(@sinclair/typebox@0.34.52)(@types/bun@1.4.0)(exact-mirror@1.2.2)(file-type@22.0.1)(openapi-types@12.1.3)(typescript@6.0.3))(express@5.2.1)(hono@4.12.31)(next@16.2.10(@babel/core@7.29.7)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(react@19.2.7)
       lucide-react:
         specifier: 'catalog:'
         version: 1.25.0(react@19.2.7)
@@ -441,13 +441,16 @@ importers:
 
   packages/cli:
     dependencies:
+      picocolors:
+        specifier: ^1.1.1
+        version: 1.1.1
       typescript:
         specifier: ^5
         version: 5.9.3
     devDependencies:
       '@types/bun':
         specifier: latest
-        version: 1.3.14
+        version: 1.4.0
 
   packages/config: {}
 
@@ -2199,6 +2202,9 @@ packages:
   '@types/bun@1.3.14':
     resolution: {integrity: sha512-h1hFqFVcvAvD9j9K7ZW7vd82aSA+rTdznZa+5bwvCwqSB1jmmfLcbIWhOLx1/+boy/xmjgCs/OMUL8hRJSmnPw==}
 
+  '@types/bun@1.4.0':
+    resolution: {integrity: sha512-K+lZULY23vRgK/CfTjFIV+tyifaNdSMlPh9j+6mQ/cLfpOznLyAuzgV/JQysyECpkBQLVMSyvjlr2fBUSA9wFQ==}
+
   '@types/debug@4.1.13':
     resolution: {integrity: sha512-KSVgmQmzMwPlmtljOomayoR89W4FynCAi3E8PPs7vmDVPe84hT+vGPKkJfThkmXs0x0jAaa9U8uW8bbfyS2fWw==}
 
@@ -2545,6 +2551,9 @@ packages:
 
   bun-types@1.3.14:
     resolution: {integrity: sha512-4N0ig0fEomHt5R0KCFWjovxow98rIoRwKolrYdCcknNwMekCXRnWEUvgu5soYV8QXtVsrUD8B95MBOZGPvr6KQ==}
+
+  bun-types@1.4.0:
+    resolution: {integrity: sha512-iIKw23BspnQQYd3prITOBxeUsxBHnwzX6YJfGMuNOZzeNcMmVqzIIVGRm1l69ogaPQmb4wB6BN8mA5bE9YuC5Q==}
 
   bundle-name@4.1.0:
     resolution: {integrity: sha512-tjwM5exMg6BGRI+kNmTntNsvdZS1X8BFYS6tnJ2hdH0kVxM6/eVZ2xy+FqStSWvYmtfFMDLIxurorHwDKfDz5Q==}
@@ -6184,6 +6193,10 @@ snapshots:
     dependencies:
       bun-types: 1.3.14
 
+  '@types/bun@1.4.0':
+    dependencies:
+      bun-types: 1.4.0
+
   '@types/debug@4.1.13':
     dependencies:
       '@types/ms': 2.1.0
@@ -6435,6 +6448,10 @@ snapshots:
     dependencies:
       '@types/node': 26.1.1
 
+  bun-types@1.4.0:
+    dependencies:
+      '@types/node': 26.1.1
+
   bundle-name@4.1.0:
     dependencies:
       run-applescript: 7.1.0
@@ -6639,6 +6656,20 @@ snapshots:
       '@types/bun': 1.3.14
       typescript: 6.0.3
 
+  elysia@1.4.29(@sinclair/typebox@0.34.52)(@types/bun@1.4.0)(exact-mirror@1.2.2)(file-type@22.0.1)(openapi-types@12.1.3)(typescript@6.0.3):
+    dependencies:
+      '@sinclair/typebox': 0.34.52
+      cookie: 1.1.1
+      exact-mirror: 1.2.2
+      fast-decode-uri-component: 1.0.1
+      file-type: 22.0.1
+      memoirist: 0.4.0
+      openapi-types: 12.1.3
+    optionalDependencies:
+      '@types/bun': 1.4.0
+      typescript: 6.0.3
+    optional: true
+
   emoji-regex@10.6.0: {}
 
   empathic@2.0.1: {}
@@ -6825,6 +6856,15 @@ snapshots:
     optionalDependencies:
       '@orpc/server': 1.14.8
       elysia: 1.4.29(@sinclair/typebox@0.34.52)(@types/bun@1.3.14)(exact-mirror@1.2.2)(file-type@22.0.1)(openapi-types@12.1.3)(typescript@6.0.3)
+      express: 5.2.1
+      hono: 4.12.31
+      next: 16.2.10(@babel/core@7.29.7)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      react: 19.2.7
+
+  evlog@2.22.0(@orpc/server@1.14.8)(elysia@1.4.29(@sinclair/typebox@0.34.52)(@types/bun@1.4.0)(exact-mirror@1.2.2)(file-type@22.0.1)(openapi-types@12.1.3)(typescript@6.0.3))(express@5.2.1)(hono@4.12.31)(next@16.2.10(@babel/core@7.29.7)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(react@19.2.7):
+    optionalDependencies:
+      '@orpc/server': 1.14.8
+      elysia: 1.4.29(@sinclair/typebox@0.34.52)(@types/bun@1.4.0)(exact-mirror@1.2.2)(file-type@22.0.1)(openapi-types@12.1.3)(typescript@6.0.3)
       express: 5.2.1
       hono: 4.12.31
       next: 16.2.10(@babel/core@7.29.7)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
