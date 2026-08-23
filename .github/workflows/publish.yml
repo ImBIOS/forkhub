@@ -16,6 +16,10 @@ on:
     tags:
       - "v*"
 
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   # ────────────────────────── canary channel ──────────────────────────
 
@@ -80,8 +84,27 @@ jobs:
 
   # ────────────────────────── stable channel ──────────────────────────
 
+  # Stable releases may ONLY be tagged from the canary branch history.
+  guard-tag-on-canary:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Verify tag commit is reachable from origin/canary
+        run: |
+          git remote set-url origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+          TAG_COMMIT=$(git rev-parse "refs/tags/${{ github.ref_name }}^{commit}")
+          git fetch origin canary
+          if ! git merge-base --is-ancestor "$TAG_COMMIT" origin/canary; then
+            echo "::error::Tag ${{ github.ref_name }} ($TAG_COMMIT) is NOT on canary. Stable tags must be cut from canary."
+            exit 1
+          fi
+
   publish-stable-npm:
     if: startsWith(github.ref, 'refs/tags/v')
+    needs: [guard-tag-on-canary]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -183,7 +206,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: main
+          ref: canary
           token: ${{ secrets.GITHUB_TOKEN }}
       - name: Download binaries
         uses: actions/download-artifact@v8
@@ -260,7 +283,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git checkout main
+          git checkout canary
           git add Formula/forkhub.rb
-          git commit -m "chore: update homebrew formula to ${VERSION}" || echo "No changes to commit"
-          git push origin main
+          git commit -m "chore: update homebrew formula to ${VERSION} [skip ci]" || echo "No changes to commit"
+          git push origin canary
