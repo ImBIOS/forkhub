@@ -1,0 +1,140 @@
+name: PR Preview
+
+# Every PR gets exactly ONE rolling comment authored as "forkhub-bot".
+#
+# Why pull_request_target: comments must also work for forks, and this job NEVER
+# executes PR code — it only queries the GitHub API and composes a comment.
+# The try-it-yourself story is a pure git-ref install (`refs/pull/N/head`),
+# so no per-PR build is required.
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: pr-preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  intent-patch-comment:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Compose and upsert forkhub-bot preview comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+
+          VIEW=$(gh pr view "$NUMBER" --repo "$REPO" \
+            --json headRefOid,commits,files,additions,deletions,statusCheckRollup)
+
+          SHA_SHORT=$(echo "$VIEW" | jq -r '.headRefOid[:7]')
+          COMMITS=$(echo "$VIEW" | jq '.commits | length')
+          ADDITIONS=$(echo "$VIEW" | jq '.additions')
+          DELETIONS=$(echo "$VIEW" | jq '.deletions')
+          CHANGED_FILES=$(echo "$VIEW" | jq '[.files[].path] | unique | length')
+
+          ROLLUP=$(echo "$VIEW" | jq -c '.statusCheckRollup // []')
+          CHECK_TOTAL=$(echo "$ROLLUP" | jq 'length')
+          CHECK_OK=$(echo "$ROLLUP" | jq '[.[] | select((.conclusion // "") == "SUCCESS" or (.state // "") == "SUCCESS")] | length')
+          CHECK_BAD=$(echo "$ROLLUP" | jq '[.[] | select(((.conclusion // .state // "") | test("FAILURE|CANCELLED|TIMED_OUT|ERROR|STARTUP_FAILURE")))] | length')
+          CHECK_PEND=$((CHECK_TOTAL - CHECK_OK - CHECK_BAD)); [ "$CHECK_PEND" -lt 0 ] && CHECK_PEND=0 || true
+          if [ "$CHECK_TOTAL" -eq 0 ]; then
+            CHECK_LINE="⏳ none reported yet"
+          else
+            CHECK_LINE="✅ ${CHECK_OK} passed · ❌ ${CHECK_BAD} failed · ⏳ ${CHECK_PEND} pending"
+          fi
+
+          MARKER='<!-- forkhub-bot:intent-patch-preview -->'
+
+          {
+            echo "$MARKER"
+            echo "# 🤖 forkhub-bot — intent-patch preview"
+            echo
+            echo "**Head:** \`$SHA_SHORT\` · commits: **$COMMITS** · updated $(date -u '+%Y-%m-%d %H:%M UTC')"
+            echo
+            echo "> This PR ships as an **intent-patch**: try it before it lands, reuse its intent forever."
+            echo "> Patches are intent, not diffs."
+            echo
+            echo "## 🧪 Try this PR with \`fh\`"
+            echo
+            echo "Requires [Bun](https://bun.sh) >= 1.3. The ref below always tracks the latest push to this PR:"
+            echo
+            echo '```bash'
+            echo "# one-shot, no global install"
+            echo "pnpm dlx \"github:${REPO}#refs/pull/${NUMBER}/head&path:packages/cli\" fh --help"
+            echo
+            echo "# or pin globally to this PR"
+            echo "pnpm add -g \"github:${REPO}#refs/pull/${NUMBER}/head&path:packages/cli\""
+            echo '```'
+            echo
+            echo "## ♻️ Reuse this intent-patch"
+            echo
+
+            INTENTS=$(echo "$VIEW" | jq -r '[.files[].path | select(test("(^|/)INTENT\\.md$"))] | .[]')
+
+            if [ -n "$INTENTS" ]; then
+              echo "This PR carries intent-patch definition(s):"
+              echo
+              echo "| intent | grab it |"
+              echo "|---|---|"
+              while IFS= read -r P; do
+                RAW="https://raw.githubusercontent.com/${REPO}/refs/pull/${NUMBER}/head/${P}"
+                echo "| \`${P}\` | \`curl -fsSL \"${RAW}\" -o INTENT.md\` |"
+              done <<< "$INTENTS"
+              echo
+              echo "Then make it yours:"
+              echo
+              echo '```bash'
+              echo "fh draft \"<what this patch does>\"   # scaffold a patch in your .forkhub repo"
+              echo "# replace the generated INTENT.md with the one above (+ ACCEPTANCE.md / verify.sh)"
+              echo "fh satisfied                         # finalize: capture reference.diff + verify gate"
+              echo '```'
+            else
+              echo "No \`INTENT.md\` in this PR yet. Capture the change as an intent-patch yourself:"
+              echo
+              echo '```bash'
+              echo 'fh draft "<what this change does>"   # declare the intent once'
+              echo '# implement/review against this PR, then:'
+              echo 'fh satisfied                         # finalize: reference.diff + verify.sh + tag'
+              echo 'fh publish                           # share it publicly'
+              echo '```'
+            fi
+
+            echo
+            echo "Anyone can then re-derive it against future upstreams — \`fh import <url-to-INTENT.md>\`, or find shared ones:"
+            echo
+            echo '```bash'
+            echo "fh search --target github.com/${REPO}"
+            echo '```'
+            echo
+            echo "## 📊 Usage metrics"
+            echo
+            echo "| metric | value |"
+            echo "|---|---|"
+            echo "| commits | $COMMITS |"
+            echo "| files touched | $CHANGED_FILES |"
+            echo "| lines | +$ADDITIONS / −$DELETIONS |"
+            echo "| CI checks | $CHECK_LINE |"
+            echo
+            echo "---"
+            echo "<sub>🤖 One rolling comment — edited on every push, never duplicated. forkhub-bot</sub>"
+          } > body.md
+
+          COMMENT_ID=$(gh api "repos/${REPO}/issues/${NUMBER}/comments" --paginate \
+            --jq ".[] | select(.user.login == \"github-actions[bot]\") | select(.body | startswith(\"${MARKER}\")) | .id" \
+            | tail -n 1 || true)
+
+          if [ -n "${COMMENT_ID:-}" ]; then
+            gh api -X PATCH "repos/${REPO}/issues/comments/${COMMENT_ID}" -F body=@body.md >/dev/null
+            echo "Updated existing comment ${COMMENT_ID}"
+          else
+            gh api -X POST "repos/${REPO}/issues/${NUMBER}/comments" -F body=@body.md >/dev/null
+            echo "Created new preview comment"
+          fi
