@@ -1,25 +1,72 @@
-# forkhub
+# forkhub (`fh`) — keep your fork's patches while staying up-to-date with upstream
 
-This project was created with [Better-T-Stack](https://github.com/AmanVarshney01/create-better-t-stack), a modern TypeScript stack that combines Next.js, Elysia, ORPC, and more.
+[![Test](https://github.com/ImBIOS/forkhub/actions/workflows/test.yml/badge.svg)](https://github.com/ImBIOS/forkhub/actions/workflows/test.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Bun](https://img.shields.io/badge/runtime-Bun%20%E2%89%A51.3-f472b6)](https://bun.sh)
 
-## Features
+**forkhub** is an open-source CLI that maintains Git forks with custom patches **without freezing them**. Declare each local change once as an **intent** (a natural-language spec + acceptance criteria), and an AI coding agent re-derives it against every new upstream release. You get the maintainer's latest features *and* your rejected-PR fixes — automatically.
 
-- **TypeScript** - For type safety and improved developer experience
-- **Next.js** - Full-stack React framework
-- **TailwindCSS** - Utility-first CSS for rapid UI development
-- **Shared UI package** - shadcn/ui primitives live in `packages/ui`
-- **Elysia** - Type-safe, high-performance framework
-- **oRPC** - End-to-end type-safe APIs with OpenAPI integration
-- **Bun** - Runtime environment
-- **Drizzle** - TypeScript-first ORM
-- **PostgreSQL** - Database engine
-- **Turborepo** - Optimized monorepo build system
-- **Oxlint** - Oxlint + Oxfmt (linting & formatting)
+> **Patches are intent, not diffs.** Diffs go stale on every upstream commit. Intent survives.
 
+- 🔁 **Stay current**: `fh update` pulls the newest upstream release and re-applies your patches.
+- 🤖 **AI re-derivation**: OpenCode, Claude Code, or any agent re-implements your intent against the new codebase — adapting, not blindly patching.
+- 🧪 **Verify gate**: every patch carries a runnable `verify.sh`; failed tests = no auto-promote.
+- 📦 **Shareable**: publish your `.forkhub` repo and anyone can import your patch intents with one command.
+- 👀 **Drift detection is cheap**: per-patch `target_area` checks skip releases that don't touch your code.
 
-## Install (Canary)
+## The problem forkhub solves
 
-We haven't published to npm yet. Try the canary:
+```
+upstream/main    ─────●─────●─────●─────►  (v1.0.0, v1.1.0, v2.0.0, v2.1.0)
+                               │
+                               └─ your patch: --cheat flag (rejected PR)
+
+your fork       ─────●─────●─────●─────►  (frozen at v2.0.0 + your patch)
+
+gap: v2.1.0 features you don't have
+```
+
+**Without forkhub:** choose one — official release (lose your patch) or your frozen fork (lose upstream features). Every upstream release means manual rebasing, conflict-fixing, re-testing.
+
+**With forkhub:** declare your patch as **intent** ("add --cheat flag, print before banner, don't touch game.ts"). An AI agent re-realizes that intent against every new upstream release. Run `forkhub update` and get both: your patch + the latest upstream.
+
+## Quick start
+
+```bash
+# 0. Install (see Install below) → you get the `fh` command
+
+# 1. From inside your fork's checkout
+fh init
+
+# 2. In OpenCode (or any AI agent), declare what you want:
+/forkhub "add --cheat flag to reveal the secret number"
+
+# 3. AI implements on a draft branch. Test it. When happy:
+fh satisfied
+
+# 4. When upstream releases a new version:
+fh update    # consumer-side: advance to latest tag
+fh watch     # daemon-side: auto-detect drift, generate bundles, apply
+```
+
+## Install
+
+### Homebrew (macOS / Linux)
+
+```bash
+brew tap ImBIOS/tap https://github.com/ImBIOS/forkhub
+brew install forkhub
+```
+
+### npm (stable / latest channel)
+
+```bash
+npm install -g forkhub   # available after v0.3.0 stable release
+```
+
+### Canary channel (current, recommended while in beta)
+
+Canary builds are published automatically on every push to the `canary` branch:
 
 ```bash
 # pnpm (recommended)
@@ -29,117 +76,116 @@ fh --help
 # or via dlx without global install
 pnpm dlx "github:ImBIOS/forkhub#canary&path:packages/cli" fh --help
 bunx --bun "github:ImBIOS/forkhub#canary&path:packages/cli" fh --help
-
-# alternative: degit + local
-npx degit ImBIOS/forkhub#canary forkhub-canary && cd forkhub-canary && pnpm install && pnpm --filter forkhub exec fh --help
 ```
 
-Web (browse repos, fork with intent system):
-- prod: https://forkhub.imbios.dev
-- canary: https://canary.forkhub.imbios.dev
-- api: https://api.forkhub.imbios.dev
+### Standalone binary
 
-## Getting Started
+Grab a prebuilt binary from [GitHub Releases](https://github.com/ImBIOS/forkhub/releases/latest):
 
-First, install the dependencies:
+```bash
+curl -fsSL https://github.com/ImBIOS/forkhub/releases/latest/download/forkhub-$(uname -s | tr A-Z a-z)-$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/') -o fh
+chmod +x fh && sudo mv fh /usr/local/bin/
+```
+
+Requires [Bun](https://bun.sh) ≥ 1.3 and `git`.
+
+## Commands
+
+| Command | Purpose |
+|---|---|
+| `init` | Set up `.forkhub` repo + config |
+| `draft "<intent>"` | Create a `*` branch + draft INTENT.md |
+| `satisfied` | Finalize intent, capture diff, port to `forkhub/main`, tag |
+| `pr [--draft] [--base <branch>]` | Push branch to your fork + open PR upstream |
+| `publish` | Push your `.forkhub` intent repo public so others can import |
+| `import <url>` | Import a patch intent from another user's `.forkhub` |
+| `search` | Find published patches by author or target repo |
+| `re-derive <patch-id>` | Generate context bundle for AI re-derivation |
+| `apply <bundle-path>` | Apply realization from bundle (with verify gate) |
+| `drift-check` | Detect which patches drifted from upstream |
+| `watch [--once] [--interval <sec>]` | Daemon: auto-detect drift + regenerate + apply |
+| `update [--tag]` | Consumer: advance to latest tag |
+| `rollback` | Consumer: roll back to previous tag |
+| `list` / `status` / `pr-status` / `cleanup` | Inspect & maintain |
+
+## How it works
+
+```
+USERNAME/.forkhub/         # intent repository (intent = truth)
+├── repos/
+│   └── github.com/owner/repo/
+│       ├── manifest.json
+│       └── patches/
+│           └── <patch-id>/
+│               ├── INTENT.md         # natural-language spec (source of truth)
+│               ├── ACCEPTANCE.md     # verification criteria
+│               ├── reference.diff    # last successful realization (evidence only)
+│               ├── verify.sh         # runnable verification script
+│               └── attempts.jsonl    # history (learn from failures)
+└── watch-state.json
+
+USERNAME/repo/                 # your fork
+├── main                       # tracks upstream
+├── forkhub/main               # built artifact, force-pushed
+└── *                          # draft branch (per patch)
+```
+
+The core invariant: **intent is truth, diffs are evidence.** When upstream releases v2.1.0, `reference.diff` goes stale. The AI re-reads `INTENT.md` and re-realizes against the new upstream. Same intent, fresh implementation.
+
+## Why this works
+
+- **Intent survives drift.** A good INTENT.md is a specification, not a diff. Re-deriving from intent gives the AI freedom to adapt to renamed files, refactors, and API changes.
+- **Drift detection is cheap.** `git log <last_realized>..<upstream> -- <target_area>` tells you if the relevant area changed. Most releases touch nothing important.
+- **Verification is mandatory.** Each patch has a runnable `verify.sh`. Failed verification = no auto-promote.
+- **Sibling awareness.** When re-deriving patch B, the agent sees patch A's realization in the context bundle and preserves it.
+
+## Real-world example
+
+[forkhub issue #7754 on pingdotgg/t3code](https://github.com/pingdotgg/t3code/issues/7754): an OSC title-sequence leak polluted T3's OpenCode agent inventory (`Agent not found: "\u001b]0;...build"` → `UnknownError`). The fix was built as a forkhub intent-patch, shipped immediately via the patched fork, and opened upstream as [#7755](https://github.com/pingdotgg/t3code/pull/7755) — all tracked by `fh pr-status`, auto-reapplied by `fh watch` on future upstream releases until merged.
+
+Anyone hitting the same bug can get the identical fix:
+
+```bash
+fh import https://github.com/ImBIOS/.forkhub/blob/main/repos/github.com/pingdotgg/t3code/patches/fix-t3code-strip-osc-ansi-escapes-from-opencode-cl-y7shx01y/INTENT.md
+```
+
+## Sharing & discovering patches
+
+Publish your intents by making your `.forkhub` public (`fh publish`). Import someone else's:
+
+```bash
+fh search --target github.com/owner/repo    # find patches for a repo
+fh search --author alice                    # browse one user's published patches
+fh import https://github.com/ALICE/.forkhub/blob/main/repos/github.com/owner/repo/patches/<patch-id>/INTENT.md
+```
+
+Imported patches keep author attribution. Re-derivation adapts them to your fork's state.
+
+## FAQ
+
+**What is forkhub?**
+A CLI + workflow for maintaining Git forks that carry custom patches. Patches are stored as natural-language intents and re-derived by AI agents on every upstream release, so your fork never freezes.
+
+**Who is forkhub for?**
+Developers whose PR was rejected/stalled upstream but who still need upstream's ongoing fixes; teams running internal forks of OSS; anyone tired of manual rebasing onto new releases.
+
+**How is forkhub different from `git rebase` or `patch-package`?**
+Rebase replays stale diffs into conflicts; `patch-package` applies static diffs at install time and breaks when code moves. forkhub stores *what you want* (intent + acceptance criteria), so an agent produces a fresh implementation each release.
+
+**Does forkhub require an AI agent?**
+Re-derivation needs one (OpenCode, Claude Code, Codex, …) via the `/forkhub` skill. Everything else — init, drift detection, tagging, update, rollback, publishing — is plain CLI.
+
+**Are my patches public?**
+Only if you publish them (`fh publish` pushes your `.forkhub` git repo to a GitHub repo you control). By default everything stays local.
+
+## Development
 
 ```bash
 pnpm install
+pnpm run dev          # web + server
+bun run packages/cli/src/cli.ts status
 ```
 
-## Database Setup
+## License
 
-This project uses PostgreSQL with Drizzle ORM.
-
-1. Make sure you have a PostgreSQL database set up.
-2. Update your `apps/server/.env` file with your PostgreSQL connection details.
-
-3. Apply the schema to your database:
-
-```bash
-pnpm run db:push
-```
-
-Then, run the development server:
-
-```bash
-pnpm run dev
-```
-
-Open [http://localhost:3001](http://localhost:3001) in your browser to see the web application.
-The API is running at [http://localhost:3000](http://localhost:3000).
-
-## UI Customization
-
-React web apps in this stack share shadcn/ui primitives through `packages/ui`.
-
-- Change design tokens and global styles in `packages/ui/src/styles/globals.css`
-- Update shared primitives in `packages/ui/src/components/*`
-- Adjust shadcn aliases or style config in `packages/ui/components.json` and `apps/web/components.json`
-
-### Add more shared components
-
-Run this from the project root to add more primitives to the shared UI package:
-
-```bash
-npx shadcn@latest add accordion dialog popover sheet table -c packages/ui
-```
-
-Import shared components like this:
-
-```tsx
-import { Button } from "@forkhub/ui/components/button";
-```
-
-### Add app-specific blocks
-
-If you want to add app-specific blocks instead of shared primitives, run the shadcn CLI from `apps/web`.
-
-## Deployment
-
-### Docker Compose
-
-- Target: web + server
-- Config: `docker-compose.yml` (app Dockerfiles live in `apps/*/Dockerfile`)
-- Build images: pnpm run docker:build
-- Start: pnpm run docker:up
-- Logs: pnpm run docker:logs
-- Stop: pnpm run docker:down
-
-Environment variables are read from each app's `.env` file (baked into web builds for public variables) and overridden in `docker-compose.yml` for container networking.
-
-For more details, see the guide on [Deploying with Docker Compose](https://www.better-t-stack.dev/docs/guides/docker).
-
-## Git Hooks and Formatting
-
-- Run checks: `pnpm run check`
-
-## Project Structure
-
-```
-forkhub/
-├── apps/
-│   ├── web/         # Frontend application (Next.js)
-│   └── server/      # Backend API (Elysia, ORPC)
-├── packages/
-│   ├── ui/          # Shared shadcn/ui components and styles
-│   ├── api/         # API layer / business logic
-│   └── db/          # Database schema & queries
-```
-
-## Available Scripts
-
-- `pnpm run dev`: Start all applications in development mode
-- `pnpm run build`: Build all applications
-- `pnpm run dev:web`: Start only the web application
-- `pnpm run dev:server`: Start only the server
-- `pnpm run check-types`: Check TypeScript types across all apps
-- `pnpm run db:push`: Push schema changes to database
-- `pnpm run db:generate`: Generate database client/types
-- `pnpm run db:migrate`: Run database migrations
-- `pnpm run db:studio`: Open database studio UI
-- `pnpm run check`: Run Oxlint and Oxfmt
-- `pnpm run docker:build`: Build the Docker Compose images
-- `pnpm run docker:up`: Build and start the Docker Compose stack
-- `pnpm run docker:logs`: Tail logs from the Docker Compose stack
-- `pnpm run docker:down`: Stop the Docker Compose stack
+MIT
