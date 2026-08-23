@@ -114,8 +114,8 @@ Two channels only. Never mix artifacts between them.
 
 | Channel | Trigger | Version format | Published to |
 |---|---|---|---|
-| **canary** | EVERY push to the `canary` branch (CI: `.github/workflows/canary.yml`) | `<dev-version>-canary.<YYYYMMDDHHmm>.<sha7>` — CI-generated, never hand-edit | npm dist-tag `canary`; also installable via `github:ImBIOS/forkhub#canary&path:packages/cli` |
-| **latest (stable)** | pushing a `vX.Y.Z` tag whose commit is on `canary` (CI: `.github/workflows/publish.yml`) | exact `X.Y.Z` | npm dist-tag `latest` + GitHub Release (**mandatory, always**) |
+| **canary** | EVERY push to the `canary` branch (CI: `.github/workflows/publish.yml`, canary jobs) | `<dev-version>-canary.<YYYYMMDDHHmm>.<sha7>` — CI-generated, never hand-edit | npm dist-tag `canary`; also installable via `github:ImBIOS/forkhub#canary&path:packages/cli` |
+| **latest (stable)** | pushing a `vX.Y.Z` tag whose commit is on `canary` (CI: `.github/workflows/publish.yml`, stable jobs) | exact `X.Y.Z` | npm dist-tag `latest` + GitHub Release (**mandatory, always**) |
 
 Rules:
 
@@ -125,4 +125,4 @@ Rules:
 - Canary publishes are automatic on every push to `canary`. Do not bump versions for canary by hand; CI derives `<base>-canary.<timestamp>.<sha>` at publish time.
 - Keep `packages/cli/package.json` version strictly ABOVE the last stable tag (right after cutting `vX.Y.Z`, bump the canary base to `X.Y.(Z+1)` or next minor) so canary semver always sorts above stable — otherwise npm rejects canary publishes.
 - After cutting a stable release, verify: `npm view forkhub version` matches the tag, the GitHub Release exists with binaries attached, and `brew install ImBIOS/tap/forkhub` still resolves.
-- First-ever publish of the package name requires a manual `npm publish` from `packages/cli` (claim name + configure OIDC trusted publishers for BOTH `publish.yml` and `canary.yml` in npm package settings). CI-only publishing works after that.
+- First-ever publish of the package name requires a manual `npm publish` from `packages/cli` (claim name + register `publish.yml` as the OIDC trusted publisher in npm package settings — npm allows only ONE workflow file per package, which is why both channels share this single workflow). CI-only publishing works after that.

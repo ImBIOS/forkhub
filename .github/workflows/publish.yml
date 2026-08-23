@@ -1,34 +1,87 @@
-name: Publish
+name: Release
+
+# Single publishing pipeline — npm Trusted Publisher allows registering exactly
+# ONE workflow file per package, so both channels live here:
+#
+#   - push to `canary` branch → forkhub@<base>-canary.<YYYYMMDDHHmm>.<sha7> on dist-tag `canary`
+#   - push tag `vX.Y.Z`       → forkhub@X.Y.Z on dist-tag `latest` + GitHub Release
+#                               (binaries + SHA256SUMS + Homebrew formula)
+#
+# Register this file (`publish.yml`) as the package's Trusted Publisher at npmjs.com.
 
 on:
   push:
+    branches:
+      - canary
     tags:
       - "v*"
 
-concurrency:
-  group: publish-${{ github.ref }}
-  cancel-in-progress: false
-
 jobs:
-  # Stable releases may ONLY be tagged from the canary branch history.
-  guard-tag-on-canary:
+  # ────────────────────────── canary channel ──────────────────────────
+
+  publish-canary-npm:
+    if: github.ref == 'refs/heads/canary'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # Required for OIDC trusted publishing
     steps:
       - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-      - name: Verify tag commit is reachable from origin/canary
-        run: |
-          git remote set-url origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
-          TAG_COMMIT=$(git rev-parse "refs/tags/${{ github.ref_name }}^{commit}")
-          git fetch origin canary
-          if ! git merge-base --is-ancestor "$TAG_COMMIT" origin/canary; then
-            echo "::error::Tag ${{ github.ref_name }} ($TAG_COMMIT) is NOT on canary. Stable tags must be cut from canary."
-            exit 1
-          fi
 
-  publish-npm:
-    needs: [guard-tag-on-canary]
+      - uses: pnpm/action-setup@v6
+        with:
+          cache: true
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm exec tsc --noEmit
+        working-directory: packages/cli
+
+      - name: Compute canary version
+        id: ver
+        run: |
+          BASE=$(node -p "require('./packages/cli/package.json').version")
+          TS=$(date -u +%Y%m%d%H%M)
+          SHA=$(git rev-parse --short=7 HEAD)
+          echo "version=${BASE}-canary.${TS}.${SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Set canary version in package.json
+        working-directory: packages/cli
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('./package.json','utf8'));j.version=process.env.VERSION;fs.writeFileSync('./package.json',JSON.stringify(j,null,2)+'\n')"
+
+      - name: Publish to npm (dist-tag canary, trusted-publisher OIDC)
+        working-directory: packages/cli
+        env:
+          NPM_CONFIG_PROVENANCE: true
+        run: npm publish --access public --provenance=true --tag canary
+
+  canary-summary:
+    if: github.ref == 'refs/heads/canary'
+    needs: [publish-canary-npm]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install instructions
+        run: |
+          echo "### Canary published 🚀" >> "$GITHUB_STEP_SUMMARY"
+          echo '```bash' >> "$GITHUB_STEP_SUMMARY"
+          echo 'pnpm add -g "github:ImBIOS/forkhub#canary&path:packages/cli"' >> "$GITHUB_STEP_SUMMARY"
+          echo '# or, once the canary dist-tag propagates:' >> "$GITHUB_STEP_SUMMARY"
+          echo 'npm i -g forkhub@canary' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+  # ────────────────────────── stable channel ──────────────────────────
+
+  publish-stable-npm:
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -58,12 +111,9 @@ jobs:
         env:
           NPM_CONFIG_PROVENANCE: true
 
-  # NOTE: GitHub Packages requires scoped packages (@scope/name).
-  # forkhub is unscoped on npm; GitHub Packages is intentionally skipped.
-  # To enable: scope package as @imbios/forkhub and add a publish-github job.
-
   build-binaries:
-    needs: [publish-npm]
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [publish-stable-npm]
     strategy:
       fail-fast: false
       matrix:
@@ -102,6 +152,7 @@ jobs:
           if-no-files-found: error
 
   attach-binaries:
+    if: startsWith(github.ref, 'refs/tags/v')
     needs: [build-binaries]
     runs-on: ubuntu-latest
     permissions:
@@ -124,6 +175,7 @@ jobs:
             dist/SHA256SUMS
 
   update-homebrew-formula:
+    if: startsWith(github.ref, 'refs/tags/v')
     needs: [attach-binaries]
     runs-on: ubuntu-latest
     permissions:
@@ -131,7 +183,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: canary
+          ref: main
           token: ${{ secrets.GITHUB_TOKEN }}
       - name: Download binaries
         uses: actions/download-artifact@v8
@@ -208,7 +260,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git checkout canary
+          git checkout main
           git add Formula/forkhub.rb
-          git commit -m "chore: update homebrew formula to ${VERSION} [skip ci]" || echo "No changes to commit"
-          git push origin canary
+          git commit -m "chore: update homebrew formula to ${VERSION}" || echo "No changes to commit"
+          git push origin main
