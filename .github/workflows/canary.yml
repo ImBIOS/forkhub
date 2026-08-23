@@ -20,7 +20,6 @@ jobs:
 
       - uses: pnpm/action-setup@v6
         with:
-          version: 11
           cache: true
 
       - uses: actions/setup-node@v6
@@ -37,12 +36,11 @@ jobs:
 
       - name: Compute canary version
         id: ver
-        env:
-          GITHUB_SHA_SHORT: ${{ github.sha }}
         run: |
           BASE=$(node -p "require('./packages/cli/package.json').version")
           TS=$(date -u +%Y%m%d%H%M)
-          echo "version=${BASE}-canary.${TS}.${GITHUB_SHA_SHORT::7}" >> "$GITHUB_OUTPUT"
+          SHA=$(git rev-parse --short=7 HEAD)
+          echo "version=${BASE}-canary.${TS}.${SHA}" >> "$GITHUB_OUTPUT"
 
       - name: Set canary version in package.json
         working-directory: packages/cli
