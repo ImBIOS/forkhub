@@ -128,7 +128,7 @@ jobs:
           } > body.md
 
           COMMENT_ID=$(gh api "repos/${REPO}/issues/${NUMBER}/comments" --paginate \
-            --jq ".[] | select(.user.login == \"github-actions[bot]\") | select(.body | startswith(\"${MARKER}\")) | .id" \
+            --jq ".[] | select(.body | startswith(\"${MARKER}\")) | .id" \
             | tail -n 1 || true)
 
           if [ -n "${COMMENT_ID:-}" ]; then
