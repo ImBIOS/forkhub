@@ -115,13 +115,14 @@ Two channels only. Never mix artifacts between them.
 | Channel | Trigger | Version format | Published to |
 |---|---|---|---|
 | **canary** | EVERY push to the `canary` branch (CI: `.github/workflows/canary.yml`) | `<dev-version>-canary.<YYYYMMDDHHmm>.<sha7>` — CI-generated, never hand-edit | npm dist-tag `canary`; also installable via `github:ImBIOS/forkhub#canary&path:packages/cli` |
-| **latest (stable)** | pushing a `vX.Y.Z` tag cut from `main` (CI: `.github/workflows/publish.yml`) | exact `X.Y.Z` | npm dist-tag `latest` + GitHub Release (**mandatory, always**) |
+| **latest (stable)** | pushing a `vX.Y.Z` tag whose commit is on `canary` (CI: `.github/workflows/publish.yml`) | exact `X.Y.Z` | npm dist-tag `latest` + GitHub Release (**mandatory, always**) |
 
 Rules:
 
-- Cut stable tags ONLY from `main`, and only when CI (`test.yml`) is green.
+- There is NO `main` branch. `canary` is the only long-lived branch and the repo default. Stable releases are tagged directly from `canary` — CI rejects tags pointing outside the `canary` history.
+- Cut stable tags ONLY from `canary`, and only when CI (`test.yml`) is green. Typical flow: commit version bump (`X.Y.(Z+1)` base stays, tag uses released number), push to canary, wait for green, then `git tag vX.Y.Z && git push origin vX.Y.Z`.
 - A stable tag WITHOUT a GitHub Release is a bug. `publish.yml` must publish to npm, build binaries, attach them (+ `SHA256SUMS`) to the GitHub Release, and update `Formula/forkhub.rb`. If any step fails, fix and re-run — don't leave a half-released tag.
 - Canary publishes are automatic on every push to `canary`. Do not bump versions for canary by hand; CI derives `<base>-canary.<timestamp>.<sha>` at publish time.
-- Keep `packages/cli/package.json` version strictly ABOVE the last stable tag (right after cutting `vX.Y.Z`, bump main/canary base to `X.Y.(Z+1)` or next minor) so canary semver always sorts above stable — otherwise npm rejects canary publishes.
+- Keep `packages/cli/package.json` version strictly ABOVE the last stable tag (right after cutting `vX.Y.Z`, bump the canary base to `X.Y.(Z+1)` or next minor) so canary semver always sorts above stable — otherwise npm rejects canary publishes.
 - After cutting a stable release, verify: `npm view forkhub version` matches the tag, the GitHub Release exists with binaries attached, and `brew install ImBIOS/tap/forkhub` still resolves.
 - First-ever publish of the package name requires a manual `npm publish` from `packages/cli` (claim name + configure OIDC trusted publishers for BOTH `publish.yml` and `canary.yml` in npm package settings). CI-only publishing works after that.

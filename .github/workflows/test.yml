@@ -2,18 +2,22 @@ name: Test
 
 on:
   push:
-    branches: [main]
+    branches: [canary]
   pull_request:
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   typecheck:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v6
         with:
           cache: true
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: "24"
       - name: Install dependencies
@@ -25,7 +29,7 @@ jobs:
   docker-orchestrator:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Build and run orchestrator test
         working-directory: packages/cli
         run: |
