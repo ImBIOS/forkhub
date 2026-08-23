@@ -1,6 +1,6 @@
 {
   "name": "forkhub",
-  "version": "0.2.10",
+  "version": "0.2.11",
   "description": "Keep up-to-date upstream + your custom patches. Patches are intent, not diffs.",
   "module": "src/cli.ts",
   "type": "module",
