@@ -6,14 +6,13 @@ export function colorsEnabled(): boolean {
   if (enabled !== undefined) return enabled;
   if (process.env.NO_COLOR !== undefined) return false;
   if (process.argv.includes("--no-color")) return false;
+  // fh is colorful by default (like better-t-stack's gradient banner), piped `| head` still colored
+  // disable only via NO_COLOR / --no-color / TERM=dumb
   if (process.argv.includes("--color")) return true;
   const force = process.env.FORCE_COLOR;
   if (force !== undefined && force !== "") return force !== "0" && force !== "false";
   if (process.env.TERM === "dumb") return false;
-  // match picocolors' win32 + CI auto-enable for parity with better-t-stack
-  if (process.platform === "win32") return true;
-  if (process.env.CI) return true;
-  return Boolean(process.stdout?.isTTY || process.stderr?.isTTY);
+  return true;
 }
 
 /** Explicit override, e.g. from --no-color / --color CLI flags. */
