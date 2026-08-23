@@ -157,13 +157,16 @@ async function runStatus() {
 }
 
 async function main() {
-  // global color flags (before anything prints)
-  const hasNoColor = process.argv.includes("--no-color");
-  const hasColor = process.argv.includes("--color");
+  // global color flags (before anything prints) — support both `fh --color list` and `fh list --color`
+  const rawArgs = process.argv.slice(2);
+  const hasNoColor = rawArgs.includes("--no-color");
+  const hasColor = rawArgs.includes("--color");
   if (hasNoColor) setColorsEnabled(false);
   else if (hasColor) setColorsEnabled(true);
+  // strip global color flags so `fh --color list` doesn't treat --color as command
+  const filteredArgs = rawArgs.filter((a) => a !== "--color" && a !== "--no-color");
 
-  const { command, opts, positional } = parseArgs(process.argv.slice(2));
+  const { command, opts, positional } = parseArgs(filteredArgs);
 
   if (!command || command === "--help" || command === "-h" || command === "help") {
     console.log(HELP);
