@@ -5,7 +5,7 @@
   "module": "src/cli.ts",
   "type": "module",
   "bin": {
-    "fh": "./bin/fh.js"
+    "fh": "bin/fh.js"
   },
   "files": [
     "bin",
