@@ -311,7 +311,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: canary
+          ref: refs/heads/canary # explicit: a rolling `canary` TAG also exists
           token: ${{ secrets.GITHUB_TOKEN }}
       - name: Download binaries
         uses: actions/download-artifact@v8
@@ -388,7 +388,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git checkout canary
+          git checkout refs/heads/canary
           git add Formula/forkhub.rb
           git commit -m "chore: update homebrew formula to ${VERSION} [skip ci]" || echo "No changes to commit"
-          git push origin canary
+          git push origin "HEAD:refs/heads/canary"

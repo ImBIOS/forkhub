@@ -4,28 +4,28 @@
 class Forkhub < Formula
   desc "Keep up-to-date upstream + your custom patches. Patches are intent, not diffs."
   homepage "https://github.com/ImBIOS/forkhub"
-  version "0.2.10"
+  version "0.2.11"
   license "MIT"
 
   on_macos do
     on_intel do
-      url "https://github.com/ImBIOS/forkhub/releases/download/v0.2.10/forkhub-darwin-x64"
-      sha256 "c47b136c47a8865757ceff381598790bb8d2e7ac4ca1801d807914b7bdd53540"
+      url "https://github.com/ImBIOS/forkhub/releases/download/v0.2.11/forkhub-darwin-x64"
+      sha256 "d526fc9a225fb9da53f78026ff2abbf1f168dd183c2e7a342a29801daf297698"
     end
     on_arm do
-      url "https://github.com/ImBIOS/forkhub/releases/download/v0.2.10/forkhub-darwin-arm64"
-      sha256 "8b5f132acaeee3971c37379a6962cf5796974a58bd78d6a2c24c5409108baff3"
+      url "https://github.com/ImBIOS/forkhub/releases/download/v0.2.11/forkhub-darwin-arm64"
+      sha256 "9378e7eecfb90da83b543e0a5144eed98d1014e64ff8d57952305826b1c1be29"
     end
   end
 
   on_linux do
     on_intel do
-      url "https://github.com/ImBIOS/forkhub/releases/download/v0.2.10/forkhub-linux-x64"
-      sha256 "c1da45726c630756c952ee4a754c1b9e8fd79962b310a65de2a5f87bf7ca1ddb"
+      url "https://github.com/ImBIOS/forkhub/releases/download/v0.2.11/forkhub-linux-x64"
+      sha256 "75816f280d4ec9c7eca348581edbcfac5f754de16e37ef7ed33629c866072635"
     end
     on_arm do
-      url "https://github.com/ImBIOS/forkhub/releases/download/v0.2.10/forkhub-linux-arm64"
-      sha256 "fe5a3e74fb9e6bb89c9776ce9102542d4539b6436943f9c994bcfa420355ac8a"
+      url "https://github.com/ImBIOS/forkhub/releases/download/v0.2.11/forkhub-linux-arm64"
+      sha256 "3bbaba51119cda6e407a1ac7e38c7a4e367206a6eb304dfdf9c1f4a1b78dad60"
     end
   end
 
