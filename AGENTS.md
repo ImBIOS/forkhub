@@ -114,15 +114,26 @@ Two channels only. Never mix artifacts between them.
 
 | Channel | Trigger | Version format | Published to |
 |---|---|---|---|
-| **canary** | EVERY push to the `canary` branch (CI: `.github/workflows/publish.yml`, canary jobs) | `<dev-version>-canary.<YYYYMMDDHHmm>.<sha7>` — CI-generated, never hand-edit | npm dist-tag `canary`; also installable via `github:ImBIOS/forkhub#canary&path:packages/cli` |
+| **canary** | EVERY push to the `canary` branch (CI: `.github/workflows/publish.yml`, canary jobs) | `<dev-version>-canary.<YYYYMMDDHHmm>.<sha7>` — CI-generated, never hand-edit | npm dist-tag `canary` **and** rolling GitHub Release tagged `canary` (4 platform binaries + `SHA256SUMS`, prerelease, never `latest`); also installable via `github:ImBIOS/forkhub#canary&path:packages/cli` |
 | **latest (stable)** | pushing a `vX.Y.Z` tag whose commit is on `canary` (CI: `.github/workflows/publish.yml`, stable jobs) | exact `X.Y.Z` | npm dist-tag `latest` + GitHub Release (**mandatory, always**) |
+
+### PR previews & forkhub-bot comment
+
+Every PR (`opened`/`synchronize`/`reopened`) is handled by `.github/workflows/pr-preview.yml`, which keeps **exactly ONE** rolling comment authored as **forkhub-bot** on the PR (identified by marker `<!-- forkhub-bot:intent-patch-preview -->`; it is edited in place on every push — never post duplicate preview comments). The comment always contains:
+
+1. **Try this PR with `fh`**: install commands pinned to the PR head — `pnpm dlx "github:ImBIOS/forkhub#refs/pull/<N>/head&path:packages/cli" fh --help` (requires Bun ≥ 1.3).
+2. **Intent-patch reuse info**: lists any `INTENT.md` files carried by the PR with grab commands, plus the `fh draft` / `fh satisfied` / `fh publish` capture workflow and `fh import` / `fh search --target github.com/ImBIOS/forkhub` reuse path.
+3. **Usage metrics**: commits, files touched, ±lines, CI check rollup.
+
+Implementation notes: the workflow uses `pull_request_target` so fork PRs get comments too, and it NEVER executes PR code (API queries + comment authoring only) — keep it that way.
+
 
 Rules:
 
 - There is NO `main` branch. `canary` is the only long-lived branch and the repo default. Stable releases are tagged directly from `canary` — CI rejects tags pointing outside the `canary` history.
 - Cut stable tags ONLY from `canary`, and only when CI (`test.yml`) is green. Typical flow: commit version bump (`X.Y.(Z+1)` base stays, tag uses released number), push to canary, wait for green, then `git tag vX.Y.Z && git push origin vX.Y.Z`.
 - A stable tag WITHOUT a GitHub Release is a bug. `publish.yml` must publish to npm, build binaries, attach them (+ `SHA256SUMS`) to the GitHub Release, and update `Formula/forkhub.rb`. If any step fails, fix and re-run — don't leave a half-released tag.
-- Canary publishes are automatic on every push to `canary`. Do not bump versions for canary by hand; CI derives `<base>-canary.<timestamp>.<sha>` at publish time.
+- Canary publishes are automatic on every push to `canary`: npm dist-tag `canary` + the rolling GitHub Release `canary` (tag is force-moved to HEAD each push; binaries + `SHA256SUMS` re-uploaded with `--clobber`). Do not bump versions for canary by hand; CI derives `<base>-canary.<timestamp>.<sha>` at publish time.
 - Keep `packages/cli/package.json` version strictly ABOVE the last stable tag (right after cutting `vX.Y.Z`, bump the canary base to `X.Y.(Z+1)` or next minor) so canary semver always sorts above stable — otherwise npm rejects canary publishes.
 - After cutting a stable release, verify: `npm view forkhub version` matches the tag, the GitHub Release exists with binaries attached, and `brew install ImBIOS/tap/forkhub` still resolves.
 - First-ever publish of the package name requires a manual `npm publish` from `packages/cli` (claim name + register `publish.yml` as the OIDC trusted publisher in npm package settings — npm allows only ONE workflow file per package, which is why both channels share this single workflow). CI-only publishing works after that.

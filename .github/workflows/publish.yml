@@ -4,6 +4,7 @@ name: Release
 # ONE workflow file per package, so both channels live here:
 #
 #   - push to `canary` branch → forkhub@<base>-canary.<YYYYMMDDHHmm>.<sha7> on dist-tag `canary`
+#                               + rolling GitHub Release `canary` (binaries + SHA256SUMS, prerelease)
 #   - push tag `vX.Y.Z`       → forkhub@X.Y.Z on dist-tag `latest` + GitHub Release
 #                               (binaries + SHA256SUMS + Homebrew formula)
 #
@@ -39,7 +40,22 @@ jobs:
             exit 1
           fi
 
-  # ────────────────────────── canary channel ──────────────────────────
+  canary-summary:
+    if: github.ref == 'refs/heads/canary'
+    needs: [publish-canary-npm]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install instructions
+        run: |
+          echo "### Canary published 🚀" >> "$GITHUB_STEP_SUMMARY"
+          echo '```bash' >> "$GITHUB_STEP_SUMMARY"
+          echo 'pnpm add -g "github:ImBIOS/forkhub#canary&path:packages/cli"' >> "$GITHUB_STEP_SUMMARY"
+          echo '# or, once the canary dist-tag propagates:' >> "$GITHUB_STEP_SUMMARY"
+          echo 'npm i -g forkhub@canary' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo 'GitHub rolling release: https://github.com/ImBIOS/forkhub/releases/tag/canary' >> "$GITHUB_STEP_SUMMARY"
+
+  # ────────────────────────── canary channel: npm ────────────────────────
 
   publish-canary-npm:
     if: github.ref == 'refs/heads/canary'
@@ -86,19 +102,97 @@ jobs:
           NPM_CONFIG_PROVENANCE: true
         run: npm publish --access public --provenance=true --tag canary
 
-  canary-summary:
+  canary-binaries:
     if: github.ref == 'refs/heads/canary'
-    needs: [publish-canary-npm]
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: bun-linux-x64
+            os: ubuntu-24.04
+            artifact: forkhub-linux-x64
+          - target: bun-linux-arm64
+            os: ubuntu-24.04-arm
+            artifact: forkhub-linux-arm64
+          - target: bun-darwin-x64
+            os: macos-15-intel
+            artifact: forkhub-darwin-x64
+          - target: bun-darwin-arm64
+            os: macos-14
+            artifact: forkhub-darwin-arm64
+    runs-on: ${{ matrix.os }}
     steps:
-      - name: Install instructions
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bunx tsc --noEmit
+        working-directory: packages/cli
+      - name: Build binary
         run: |
-          echo "### Canary published 🚀" >> "$GITHUB_STEP_SUMMARY"
-          echo '```bash' >> "$GITHUB_STEP_SUMMARY"
-          echo 'pnpm add -g "github:ImBIOS/forkhub#canary&path:packages/cli"' >> "$GITHUB_STEP_SUMMARY"
-          echo '# or, once the canary dist-tag propagates:' >> "$GITHUB_STEP_SUMMARY"
-          echo 'npm i -g forkhub@canary' >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          mkdir -p dist
+          bun build --compile --target=${{ matrix.target }} --minify \
+            --outfile=dist/${{ matrix.artifact }} ./src/cli.ts
+        working-directory: packages/cli
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: canary-${{ matrix.artifact }}
+          path: packages/cli/dist/*
+          if-no-files-found: error
+
+  # Independent of publish-canary-npm so the GitHub channel keeps shipping even
+  # if npm is unavailable (e.g. before first-ever manual package claim).
+  canary-release:
+    if: github.ref == 'refs/heads/canary'
+    needs: [canary-binaries]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Move `canary` tag and upsert rolling release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          BASE=$(node -p "require('./packages/cli/package.json').version")
+          VERSION="${BASE}-canary.$(date -u +%Y%m%d%H%M).$(git rev-parse --short=7 HEAD)"
+          (cd dist && sha256sum forkhub-* > SHA256SUMS)
+          {
+            echo "Rolling canary build of \`canary\` @ \`${GITHUB_SHA}\`"
+            echo
+            echo "- Version: \`${VERSION}\`"
+            echo "- npm: \`forkhub@${VERSION}\` on dist-tag \`canary\`"
+            echo
+            echo '```bash'
+            echo '# CLI via git ref'
+            echo 'pnpm add -g "github:ImBIOS/forkhub#canary&path:packages/cli"'
+            echo
+            echo '# or standalone binary (pick your platform asset)'
+            echo 'curl -fsSL -o fh https://github.com/ImBIOS/forkhub/releases/download/canary/forkhub-linux-x64 && chmod +x fh'
+            echo '```'
+            echo
+            echo '> Pre-release channel — expect breakage. Stable: [latest release](https://github.com/ImBIOS/forkhub/releases/latest).'
+          } > notes.md
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -f canary "$GITHUB_SHA"
+          git push -f origin refs/tags/canary
+
+          if gh release view canary --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit canary --title "canary" --notes-file notes.md --prerelease --latest=false
+            gh release upload canary dist/* --clobber
+          else
+            gh release create canary dist/* --title "canary" --notes-file notes.md --prerelease --latest=false
+          fi
 
   # ────────────────────────── stable channel ──────────────────────────
 
