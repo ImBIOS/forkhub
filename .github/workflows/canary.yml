@@ -5,6 +5,10 @@ on:
     branches: [canary]
   workflow_dispatch:
 
+concurrency:
+  group: canary-${{ github.ref }}
+  cancel-in-progress: true
+
 # NOTE: npm OIDC trusted publishing requires this exact repo + workflow to be
 # registered as a trusted publisher on the `forkhub` package at npmjs.com
 # (same as publish.yml). First-ever publish must be done manually to claim the name.
