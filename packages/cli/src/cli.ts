@@ -20,7 +20,7 @@ Usage:
   fh draft "<intent>"                    Create a draft branch for a new patch
   fh satisfied [--skip-port]             Finalize intent, port to forkhub/main
   fh pr [--draft] [--base <branch>]      Push current branch + open PR to upstream
-  fh publish [--message <msg>]           Push .forkhub repo to your public GitHub repo
+  fh publish [--message <msg>] [--allow-missing-pr]  Push .forkhub repo (requires open issue+PR by default)
   fh import <url> [--force]              Import a patch from another user's .forkhub
   fh search [query] [--target <repo>]    Search GitHub for patches
   fh re-derive <patch-id> [--force]      Generate re-derivation context bundle
@@ -313,9 +313,10 @@ async function main() {
       }
 
       case "publish": {
-        const pubOpts: { message?: string } = {};
+        const pubOpts: { message?: string; allowMissingPr?: boolean } = {};
         if (typeof opts.message === "string") pubOpts.message = opts.message;
         if (typeof opts.m === "string") pubOpts.message = opts.m;
+        if (opts["allow-missing-pr"] === true) pubOpts.allowMissingPr = true;
 
         const result = await runPublish(pubOpts);
         if (result.pushed) {
