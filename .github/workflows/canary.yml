@@ -50,7 +50,7 @@ jobs:
           node -e "const fs=require('fs');const f='./package.json';const j=JSON.parse(fs.readFileSync(f,'utf8'));j.version=process.env.VERSION;fs.writeFileSync(f,JSON.stringify(j,null,2)+'\n')"
           echo "Publishing $(node -p "require('./package.json').version")"
 
-      - name: Publish to npm (dist-tag: canary, trusted publisher OIDC)
+      - name: Publish to npm (dist-tag canary, trusted-publisher OIDC)
         working-directory: packages/cli
         env:
           NPM_CONFIG_PROVENANCE: true
