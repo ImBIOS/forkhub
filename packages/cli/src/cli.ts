@@ -25,7 +25,7 @@ Usage:
   fh search [query] [--target <repo>]    Search GitHub for patches
   fh re-derive <patch-id> [--force]      Generate re-derivation context bundle
   fh apply <bundle-path>                 Apply realization from context bundle
-  fh drift-check                         Check if patches need re-derivation
+   fh drift-check [--json]                 Check if patches need re-derivation
   fh watch [--once] [--interval <sec>] [--agent <name>]
                                          Daemon: auto-detect drift + generate bundles
   fh update [--tag <tag>] [--dry-run]    Update to latest (or specified) tag
@@ -197,7 +197,11 @@ async function main() {
 
       case "drift-check": {
         const result = await runDriftCheck();
-        console.log(formatDriftCheckResult(result));
+        if (opts.json === true) {
+          console.log(JSON.stringify(result, null, 2));
+        } else {
+          console.log(formatDriftCheckResult(result));
+        }
         break;
       }
 
