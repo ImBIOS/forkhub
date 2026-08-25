@@ -25,6 +25,8 @@ export type PatchDriftStatus = {
     url: string;
     state: "open" | "merged" | "closed";
     mergeCommit?: string;
+    /** false when the PR merged somewhere other than the tracked upstream branch */
+    mergeOnTrackedBranch?: boolean;
   } | null;
 };
 
@@ -204,12 +206,23 @@ export async function runDriftCheck(options: DriftCheckOptions = {}): Promise<Dr
           mergeCommit: prState.mergeCommit,
         };
         if (prState.state === "merged") {
-          status = "upstreamed";
-          // If we have the merge commit, advance last_realized to it so the
-          // next drift cycle starts from the post-merge state.
-          if (prState.mergeCommit) {
-            patchInfo.last_realized_against_commit = shortSha(prState.mergeCommit);
+          // Only trust the merge commit when it actually landed on the
+          // tracked upstream branch — `fh pr --base` allows merging a PR
+          // elsewhere, and advancing last_realized to such a commit would
+          // silently corrupt drift tracking.
+          const mergeOnTracked =
+            !!prState.mergeCommit &&
+            (
+              await gitExec(["merge-base", "--is-ancestor", prState.mergeCommit, upstreamSha])
+            ).exitCode === 0;
+          if (mergeOnTracked) {
+            status = "upstreamed";
+            // Advance last_realized to the merge commit so the next drift
+            // cycle starts from the post-merge state.
+            patchInfo.last_realized_against_commit = shortSha(prState.mergeCommit!);
             manifestDirty = true;
+          } else {
+            prInfo.mergeOnTrackedBranch = false;
           }
         }
       }
@@ -286,6 +299,12 @@ function truncate(text: string, max: number): string {
   return text.length > max ? text.slice(0, max - 1) + "…" : text;
 }
 
+/** Strip C0/C1 control characters (incl. ESC) — INTENT.md fields are untrusted input. */
+function sanitize(text: string): string {
+  // eslint-disable-next-line no-control-regex
+  return text.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
+}
+
 function summarizeFiles(files: string[], max = 3): string {
   if (files.length === 0) return "";
   const shown = files.slice(0, max).join(", ");
@@ -301,8 +320,11 @@ export function formatDriftCheckResult(result: DriftCheckResult): string {
   const unknown = result.patches.filter((p) => p.status === "unknown");
   const currentCount = result.summary.current;
 
-  const labelOf = (p: PatchDriftStatus): string =>
-    p.title ? `“${truncate(p.title, 80)}”` : truncate(p.patchId, 60);
+  const labelOf = (p: PatchDriftStatus): string => {
+    if (p.title) return `“${truncate(sanitize(p.title), 80)}”`;
+    return truncate(sanitize(p.patchId), 60);
+  };
+  const pidOf = (p: PatchDriftStatus): string => sanitize(p.patchId);
 
   lines.push(
     `Upstream: ${shortSha(result.upstreamSha)} ${
@@ -326,7 +348,7 @@ export function formatDriftCheckResult(result: DriftCheckResult): string {
     lines.push("");
     for (const [i, patch] of drifted.entries()) {
       lines.push(`  ${i + 1}. ${labelOf(patch)}`);
-      lines.push(`      patch:    ${patch.patchId}`);
+      lines.push(`      patch:    ${pidOf(patch)}`);
       if (!patch.lastRealizedSha) {
         lines.push("      reason:   imported but never realized against upstream yet");
       } else if (patch.filesChangedInTargetArea.length > 0) {
@@ -343,8 +365,15 @@ export function formatDriftCheckResult(result: DriftCheckResult): string {
         );
       } else if (patch.appliedUpstreamPr?.state === "closed") {
         lines.push(`      upstream: PR #${patch.appliedUpstreamPr.number} was closed without merging`);
+      } else if (
+        patch.appliedUpstreamPr?.state === "merged" &&
+        patch.appliedUpstreamPr.mergeOnTrackedBranch === false
+      ) {
+        lines.push(
+          `      upstream: PR #${patch.appliedUpstreamPr.number} merged, but NOT on the tracked upstream branch — ignoring it`,
+        );
       }
-      lines.push(`      fix:      fh re-derive ${patch.patchId}`);
+      lines.push(`      fix:      fh re-derive ${pidOf(patch)}`);
       lines.push("");
     }
   }
@@ -357,7 +386,7 @@ export function formatDriftCheckResult(result: DriftCheckResult): string {
         : "";
       const pr = patch.appliedUpstreamPr ? ` — #${patch.appliedUpstreamPr.number}${merged}` : "";
       lines.push(`  • ${labelOf(patch)}${pr}`);
-      lines.push(`      patch: ${patch.patchId}`);
+      lines.push(`      patch: ${pidOf(patch)}`);
     }
     lines.push("");
   }
@@ -366,7 +395,7 @@ export function formatDriftCheckResult(result: DriftCheckResult): string {
     lines.push("Unclear state — needs a human look:");
     for (const patch of unknown) {
       lines.push(`  • ${labelOf(patch)}`);
-      lines.push(`      patch: ${patch.patchId}`);
+      lines.push(`      patch: ${pidOf(patch)}`);
     }
     lines.push("");
   }
@@ -377,10 +406,10 @@ export function formatDriftCheckResult(result: DriftCheckResult): string {
     lines.push("  2. point your AI agent at prompt.md in the bundle and let it fill");
     lines.push("     REALIZATION/realization.diff (fh watch --agent can automate this)");
     lines.push("  3. fh apply <bundle-path>           apply + tag when tests pass");
-  } else if (upstreamed.length > 0) {
-    lines.push("All covered. Consider removing the upstreamed patches from .forkhub.");
   } else if (unknown.length > 0) {
     lines.push("Everything else is current; only the unclear entries above need attention.");
+  } else if (upstreamed.length > 0) {
+    lines.push("All covered. Consider removing the upstreamed patches from .forkhub.");
   } else {
     lines.push("All patches current. Nothing to do.");
   }
