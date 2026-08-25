@@ -1,7 +1,11 @@
+import { DEFAULT_TAG_PATTERN, globToRegExp } from "./tags";
+
 export type UpdateOptions = {
   tag?: string;
   dryRun?: boolean;
   skipInstall?: boolean;
+  /** Glob limiting which tags are visible (channel/track pinning). */
+  tagPattern?: string;
 };
 
 export type UpdateResult = {
@@ -64,7 +68,7 @@ export async function fetchTags(): Promise<void> {
   await gitOrThrow(["fetch", "--tags", "--quiet"]);
 }
 
-export async function listTags(pattern = "v*-fh*"): Promise<TagInfo[]> {
+export async function listTags(pattern: string = DEFAULT_TAG_PATTERN): Promise<TagInfo[]> {
   const tagNames = await gitOrThrow(["tag", "--list", pattern, "--sort=-v:refname"]);
   if (!tagNames) return [];
   const names = tagNames.split("\n").filter(Boolean);
@@ -115,14 +119,15 @@ export async function runUpdate(options: UpdateOptions = {}): Promise<UpdateResu
   await fetchTags();
 
   let targetTag: string | undefined = options.tag;
+  const pattern = options.tagPattern ?? DEFAULT_TAG_PATTERN;
   if (!targetTag) {
-    const tags = await listTags();
+    const tags = await listTags(pattern);
     if (tags.length === 0) {
-      throw new Error("No forkhub tags found (looking for v*-fh*). Run a re-derivation first.");
+      throw new Error(`No forkhub tags found (looking for ${pattern}). Run a re-derivation first.`);
     }
     const latest = tags[0];
     if (!latest) {
-      throw new Error("No forkhub tags found (looking for v*-fh*). Run a re-derivation first.");
+      throw new Error(`No forkhub tags found (looking for ${pattern}). Run a re-derivation first.`);
     }
     targetTag = latest.name;
   }
@@ -130,12 +135,33 @@ export async function runUpdate(options: UpdateOptions = {}): Promise<UpdateResu
   const from = await currentSha();
   const targetSha = await gitOrThrow(["rev-list", "-n1", targetTag]);
 
+  if (!globToRegExp(pattern).test(targetTag)) {
+    throw new Error(
+      `Tag '${targetTag}' does not match the configured tag_pattern '${pattern}'.\n` +
+        `Refusing to jump channels. Pass --tag-pattern <glob> to override intentionally.`,
+    );
+  }
+
   if (from === targetSha) {
-    return { from, to: targetTag, toSha: targetSha, stashed: false, stashRestored: false, skipped: true };
+    return {
+      from,
+      to: targetTag,
+      toSha: targetSha,
+      stashed: false,
+      stashRestored: false,
+      skipped: true,
+    };
   }
 
   if (options.dryRun) {
-    return { from, to: targetTag, toSha: targetSha, stashed: false, stashRestored: false, skipped: false };
+    return {
+      from,
+      to: targetTag,
+      toSha: targetSha,
+      stashed: false,
+      stashRestored: false,
+      skipped: false,
+    };
   }
 
   const stashed = await stash("forkhub: pre-update");

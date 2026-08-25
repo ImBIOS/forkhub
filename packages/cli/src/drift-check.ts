@@ -1,14 +1,12 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import {
-  isGitRepo,
-  gitOrThrow,
-  gitExec,
-  shortSha,
-} from "./git";
+import { isGitRepo, gitOrThrow, gitExec, shortSha } from "./git";
+import { findTargetRepo } from "./target-repo";
+import { resolveTagPattern } from "./tags";
 
 export type DriftCheckOptions = {
   forkhubDir?: string;
+  targetRepo?: string;
 };
 
 export type PatchDriftStatus = {
@@ -35,6 +33,8 @@ export type DriftCheckResult = {
   lastKnownSha: string;
   upstreamAdvanced: boolean;
   patches: PatchDriftStatus[];
+  /** Non-fatal issues (gh auth failures, network problems, ambiguous state). */
+  warnings: string[];
   summary: {
     total: number;
     current: number;
@@ -59,7 +59,10 @@ function readUpstreamConfig(repoDir: string): any {
   return JSON.parse(readFileSync(upstreamJsonPath, "utf-8"));
 }
 
-function readIntentMeta(repoDir: string, patchId: string): { title: string | null; targetArea: string[] } {
+function readIntentMeta(
+  repoDir: string,
+  patchId: string,
+): { title: string | null; targetArea: string[] } {
   const intentPath = join(repoDir, "patches", patchId, "INTENT.md");
   if (!existsSync(intentPath)) return { title: null, targetArea: [] };
   const content = readFileSync(intentPath, "utf-8");
@@ -74,79 +77,48 @@ function readIntentMeta(repoDir: string, patchId: string): { title: string | nul
   return { title: titleMatch?.[1]?.trim().replace(/["']/g, "") ?? null, targetArea };
 }
 
-async function findTargetRepo(forkhubDir: string, forkCwd: string): Promise<string> {
-  const { getRemoteUrl, listRemotes } = await import("./git");
-  for (const remote of await listRemotes(forkCwd)) {
-    const url = await getRemoteUrl(remote, forkCwd);
-    if (!url) continue;
-    let match = url.match(/^git@([^:]+):(.+?)(?:\.git)?$/);
-    if (match) {
-      const targetRepo = `${match[1]}/${match[2]}`;
-      if (existsSync(join(forkhubDir, "repos", targetRepo, "manifest.json"))) return targetRepo;
-    }
-    match = url.match(/^https?:\/\/([^/]+)\/(.+?)(?:\.git)?$/);
-    if (match) {
-      const targetRepo = `${match[1]}/${match[2]}`;
-      if (existsSync(join(forkhubDir, "repos", targetRepo, "manifest.json"))) return targetRepo;
-    }
-  }
-  const { readdirSync } = await import("node:fs");
-  const reposDir = join(forkhubDir, "repos");
-  if (!existsSync(reposDir)) {
-    throw new Error("No repos found in .forkhub. Run `forkhub init` first.");
-  }
-  for (const host of readdirSync(reposDir)) {
-    for (const owner of readdirSync(join(reposDir, host))) {
-      for (const repo of readdirSync(join(reposDir, host, owner))) {
-        const targetRepo = `${host}/${owner}/${repo}`;
-        if (existsSync(join(reposDir, targetRepo, "manifest.json"))) {
-          return targetRepo;
-        }
-      }
-    }
-  }
-  throw new Error("Could not determine target repo from .forkhub.");
-}
-
 /**
  * Check the state of an upstream PR via `gh pr view`.
- * Returns the PR state (open/merged/closed) and merge commit SHA if merged.
- * On failure (gh not installed, no auth, network), returns null — callers
- * should not block drift-check just because PR tracking is unavailable.
+ * On success returns the PR state (open/merged/closed) and merge commit SHA if merged.
+ * On failure (gh not installed, no auth, network) returns ok:false with a reason —
+ * drift-check must not block, but it WARNS loudly instead of silently marking
+ * merged patches as drifted forever.
  */
 async function checkUpstreamPrState(
   targetRepo: string,
   prNumber: number,
-): Promise<{ state: "open" | "merged" | "closed"; mergeCommit?: string } | null> {
+): Promise<
+  | { ok: true; state: "open" | "merged" | "closed"; mergeCommit?: string }
+  | { ok: false; reason: string }
+> {
   // Use gh CLI (not git) to query PR state
-  const proc = Bun.spawn(["gh", "pr", "view", String(prNumber),
-    "--repo", targetRepo,
-    "--json", "state,mergeCommit",
-  ], {
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const [stdout] = await Promise.all([
+  const proc = Bun.spawn(
+    ["gh", "pr", "view", String(prNumber), "--repo", targetRepo, "--json", "state,mergeCommit"],
+    {
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
+  const [stdout, stderr] = await Promise.all([
     new Response(proc.stdout).text(),
     new Response(proc.stderr).text(),
   ]);
   const exitCode = await proc.exited;
   if (exitCode !== 0) {
-    // gh not installed, no auth, or PR not found — don't block
-    return null;
+    return { ok: false, reason: (stderr || stdout || "gh exited non-zero").trim().slice(0, 200) };
   }
   try {
     const data = JSON.parse(stdout.trim());
     const rawState = data.state?.toUpperCase();
     if (rawState === "MERGED") {
-      return { state: "merged", mergeCommit: data.mergeCommit?.oid };
+      return { ok: true, state: "merged", mergeCommit: data.mergeCommit?.oid };
     }
     if (rawState === "CLOSED") {
-      return { state: "closed" };
+      return { ok: true, state: "closed" };
     }
-    return { state: "open" };
+    return { ok: true, state: "open" };
   } catch {
-    return null;
+    return { ok: false, reason: `unparseable gh output: ${stdout.trim().slice(0, 120)}` };
   }
 }
 
@@ -160,25 +132,51 @@ export async function runDriftCheck(options: DriftCheckOptions = {}): Promise<Dr
     throw new Error(".forkhub repo not found. Run `forkhub init` first.");
   }
 
-  const targetRepo = await findTargetRepo(forkhubDir, process.cwd());
+  const targetRepo = await findTargetRepo(forkhubDir, process.cwd(), options.targetRepo);
   const repoDir = join(forkhubDir, "repos", targetRepo);
   const manifest = readManifest(repoDir);
   const upstreamConfig = readUpstreamConfig(repoDir);
 
   const upstreamRemote = upstreamConfig.upstream_remote ?? "upstream";
-  const upstreamBranch = `${upstreamRemote}/${manifest.upstream_main_branch ?? "main"}`;
+  const upstreamBranchName = manifest.upstream_main_branch ?? "main";
+  const upstreamBranch = `${upstreamRemote}/${upstreamBranchName}`;
 
   const fetchResult = await gitExec(["fetch", upstreamRemote, "--quiet"]);
   if (fetchResult.exitCode !== 0) {
     throw new Error(`Could not fetch from ${upstreamRemote}: ${fetchResult.stderr}`);
   }
 
-  const upstreamSha = await gitOrThrow(["rev-parse", upstreamBranch]);
+  // Drift baseline: branch tip (default) or the latest upstream release tag.
+  // Building from tags while measuring against a branch tip re-derives against
+  // commits nobody can run; `drift_against: "tag"` fixes that baseline.
+  const driftAgainst = manifest.drift_against === "tag" ? "tag" : "branch";
+  let upstreamSha = await gitOrThrow(["rev-parse", upstreamBranch]);
+  if (driftAgainst === "tag") {
+    // Exclude our own track tags so a leaked -fh* tag can't become the baseline.
+    const trackPattern = await resolveTagPattern(forkhubDir);
+    const describeResult = await gitExec([
+      "describe",
+      "--tags",
+      "--abbrev=0",
+      "--exclude",
+      trackPattern,
+      upstreamSha,
+    ]);
+    if (describeResult.exitCode === 0 && describeResult.stdout) {
+      upstreamSha = await gitOrThrow(["rev-list", "-n1", describeResult.stdout]);
+    } else {
+      console.error(
+        `⚠ drift_against is "tag" but no tags are reachable from ${upstreamBranch}; falling back to branch tip.`,
+      );
+    }
+  }
+
   const lastKnownSha = upstreamConfig.last_known_upstream_sha ?? upstreamSha;
   const upstreamAdvanced = shortSha(upstreamSha) !== shortSha(lastKnownSha);
 
   const patchIds = Object.keys(manifest.patches || {});
   const patchStatuses: PatchDriftStatus[] = [];
+  const warnings: string[] = [];
   let manifestDirty = false;
 
   for (const patchId of patchIds) {
@@ -198,7 +196,12 @@ export async function runDriftCheck(options: DriftCheckOptions = {}): Promise<Dr
     // If closed (not merged) → NEEDS_HUMAN (surface to user).
     if (appliedPr?.number) {
       const prState = await checkUpstreamPrState(targetRepo, appliedPr.number);
-      if (prState) {
+      if (!prState.ok) {
+        const msg =
+          `Could not check state of PR #${appliedPr.number} (${patchId}): ${prState.reason}. ` +
+          `If this PR actually merged, it will keep showing as drifted until gh works.`;
+        warnings.push(msg);
+      } else {
         prInfo = {
           number: appliedPr.number,
           url: appliedPr.url ?? `https://github.com/${targetRepo}/pull/${appliedPr.number}`,
@@ -212,9 +215,8 @@ export async function runDriftCheck(options: DriftCheckOptions = {}): Promise<Dr
           // silently corrupt drift tracking.
           const mergeOnTracked =
             !!prState.mergeCommit &&
-            (
-              await gitExec(["merge-base", "--is-ancestor", prState.mergeCommit, upstreamSha])
-            ).exitCode === 0;
+            (await gitExec(["merge-base", "--is-ancestor", prState.mergeCommit, upstreamSha]))
+              .exitCode === 0;
           if (mergeOnTracked) {
             status = "upstreamed";
             // Advance last_realized to the merge commit so the next drift
@@ -241,7 +243,10 @@ export async function runDriftCheck(options: DriftCheckOptions = {}): Promise<Dr
         if (targetArea.length > 0) {
           const areaArgs = targetArea.flatMap((a) => ["--", a]);
           const diffResult = await gitExec([
-            "diff", "--name-only", `${lastRealizedSha}..${upstreamSha}`, ...areaArgs,
+            "diff",
+            "--name-only",
+            `${lastRealizedSha}..${upstreamSha}`,
+            ...areaArgs,
           ]);
           filesChangedInTargetArea = diffResult.stdout
             ? diffResult.stdout.split("\n").filter(Boolean)
@@ -291,6 +296,7 @@ export async function runDriftCheck(options: DriftCheckOptions = {}): Promise<Dr
     lastKnownSha,
     upstreamAdvanced,
     patches: patchStatuses,
+    warnings,
     summary,
   };
 }
@@ -328,9 +334,18 @@ export function formatDriftCheckResult(result: DriftCheckResult): string {
 
   lines.push(
     `Upstream: ${shortSha(result.upstreamSha)} ${
-      result.upstreamAdvanced ? `(advanced from ${shortSha(result.lastKnownSha)})` : "(unchanged since last check)"
+      result.upstreamAdvanced
+        ? `(advanced from ${shortSha(result.lastKnownSha)})`
+        : "(unchanged since last check)"
     }`,
   );
+
+  if (result.warnings.length > 0) {
+    lines.push("");
+    for (const warning of result.warnings) {
+      lines.push(`⚠ ${warning}`);
+    }
+  }
 
   if (result.patches.length === 0) {
     lines.push("");
@@ -357,14 +372,18 @@ export function formatDriftCheckResult(result: DriftCheckResult): string {
         );
         lines.push(`                ${summarizeFiles(patch.filesChangedInTargetArea)}`);
       } else {
-        lines.push("      reason:   target_area not declared — cannot prove it's still safe, treat as drifted");
+        lines.push(
+          "      reason:   target_area not declared — cannot prove it's still safe, treat as drifted",
+        );
       }
       if (patch.appliedUpstreamPr?.state === "open") {
         lines.push(
           `      upstream: PR #${patch.appliedUpstreamPr.number} still open — once merged, this patch becomes obsolete`,
         );
       } else if (patch.appliedUpstreamPr?.state === "closed") {
-        lines.push(`      upstream: PR #${patch.appliedUpstreamPr.number} was closed without merging`);
+        lines.push(
+          `      upstream: PR #${patch.appliedUpstreamPr.number} was closed without merging`,
+        );
       } else if (
         patch.appliedUpstreamPr?.state === "merged" &&
         patch.appliedUpstreamPr.mergeOnTrackedBranch === false
@@ -402,7 +421,9 @@ export function formatDriftCheckResult(result: DriftCheckResult): string {
 
   if (drifted.length > 0) {
     lines.push("What to do next:");
-    lines.push("  1. fh re-derive <patch-id>          regenerate the context bundle for each drifted patch");
+    lines.push(
+      "  1. fh re-derive <patch-id>          regenerate the context bundle for each drifted patch",
+    );
     lines.push("  2. point your AI agent at prompt.md in the bundle and let it fill");
     lines.push("     REALIZATION/realization.diff (fh watch --agent can automate this)");
     lines.push("  3. fh apply <bundle-path>           apply + tag when tests pass");

@@ -45,7 +45,10 @@ export async function isDirty(cwd: string = process.cwd()): Promise<boolean> {
   return status.length > 0;
 }
 
-export async function getRemoteUrl(name: string, cwd: string = process.cwd()): Promise<string | null> {
+export async function getRemoteUrl(
+  name: string,
+  cwd: string = process.cwd(),
+): Promise<string | null> {
   const result = await gitExec(["remote", "get-url", name], cwd);
   return result.exitCode === 0 ? result.stdout : null;
 }
@@ -63,7 +66,11 @@ export async function checkout(ref: string, cwd: string = process.cwd()): Promis
   await gitOrThrow(["checkout", "--quiet", ref], cwd);
 }
 
-export async function createBranch(name: string, base: string, cwd: string = process.cwd()): Promise<void> {
+export async function createBranch(
+  name: string,
+  base: string,
+  cwd: string = process.cwd(),
+): Promise<void> {
   await gitOrThrow(["checkout", "-b", name, base], cwd);
 }
 
@@ -82,7 +89,10 @@ export async function stashPop(cwd: string = process.cwd()): Promise<boolean> {
   return result.exitCode === 0;
 }
 
-export async function listTags(pattern = "v*-fh*", cwd: string = process.cwd()): Promise<{ name: string; sha: string }[]> {
+export async function listTags(
+  pattern = "v*-fh*",
+  cwd: string = process.cwd(),
+): Promise<{ name: string; sha: string }[]> {
   const tagNames = await gitOrThrow(["tag", "--list", pattern, "--sort=-v:refname"], cwd);
   if (!tagNames) return [];
   const names = tagNames.split("\n").filter(Boolean);
@@ -94,12 +104,22 @@ export async function listTags(pattern = "v*-fh*", cwd: string = process.cwd()):
   return infos;
 }
 
-export async function diff(from: string, to: string, cwd: string = process.cwd(), ...extraArgs: string[]): Promise<string> {
+export async function diff(
+  from: string,
+  to: string,
+  cwd: string = process.cwd(),
+  ...extraArgs: string[]
+): Promise<string> {
   if (extraArgs[0] === "--") extraArgs.shift();
   return await gitOrThrow(["diff", `${from}..${to}`, ...extraArgs], cwd);
 }
 
-export async function diffNameOnly(from: string, to: string, cwd: string = process.cwd(), ...extraArgs: string[]): Promise<string[]> {
+export async function diffNameOnly(
+  from: string,
+  to: string,
+  cwd: string = process.cwd(),
+  ...extraArgs: string[]
+): Promise<string[]> {
   if (extraArgs[0] === "--") extraArgs.shift();
   const result = await gitOrThrow(["diff", "--name-only", `${from}..${to}`, ...extraArgs], cwd);
   return result ? result.split("\n").filter(Boolean) : [];
@@ -107,4 +127,44 @@ export async function diffNameOnly(from: string, to: string, cwd: string = proce
 
 export function shortSha(sha: string): string {
   return sha.slice(0, 7);
+}
+
+export async function refExists(ref: string, cwd: string = process.cwd()): Promise<boolean> {
+  const result = await gitExec(["rev-parse", "--verify", "--quiet", ref], cwd);
+  return result.exitCode === 0;
+}
+
+export async function mergeBase(
+  a: string,
+  b: string,
+  cwd: string = process.cwd(),
+): Promise<string | null> {
+  const result = await gitExec(["merge-base", a, b], cwd);
+  return result.exitCode === 0 ? result.stdout : null;
+}
+
+export async function isAncestor(
+  ancestor: string,
+  descendant: string,
+  cwd: string = process.cwd(),
+): Promise<boolean> {
+  const result = await gitExec(["merge-base", "--is-ancestor", ancestor, descendant], cwd);
+  return result.exitCode === 0;
+}
+
+/** Commits reachable from `from` but not `to`, oldest first. */
+export async function revListReverse(
+  from: string,
+  to: string,
+  cwd: string = process.cwd(),
+): Promise<{ sha: string; subject: string }[]> {
+  const result = await gitOrThrow(["log", "--reverse", "--format=%H%x00%s", `${to}..${from}`], cwd);
+  if (!result) return [];
+  return result
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => {
+      const [sha, subject] = line.split("\x00");
+      return { sha: sha ?? "", subject: subject ?? "" };
+    });
 }

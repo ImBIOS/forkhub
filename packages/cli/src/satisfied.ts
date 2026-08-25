@@ -11,9 +11,11 @@ import {
   shortSha,
   checkout,
   cherryPick,
+  refExists,
 } from "./git";
-import { slugify, generateULID8 } from "./patch-id";
-import type { InitOptions } from "./init";
+import { generateULID8 } from "./patch-id";
+import { findTargetRepo } from "./target-repo";
+import { resolveTagPattern, deriveNextFhTag } from "./tags";
 
 export type SatisfiedOptions = {
   forkhubDir?: string;
@@ -49,45 +51,6 @@ function parseDraft(content: string): { slug: string; intent: string; baseSha: s
   };
 }
 
-async function findTargetRepo(forkhubDir: string, forkCwd: string): Promise<string> {
-  if (existsSync(join(forkhubDir, "repos"))) {
-    const reposDir = join(forkhubDir, "repos");
-    // Try to match by upstream remote URL
-    const { getRemoteUrl, listRemotes } = await import("./git");
-    for (const remote of await listRemotes(forkCwd)) {
-      const url = await getRemoteUrl(remote, forkCwd);
-      if (!url) continue;
-      // Parse URL to path
-      let match = url.match(/^git@([^:]+):(.+?)(?:\.git)?$/);
-      if (match) {
-        const targetRepo = `${match[1]}/${match[2]}`;
-        if (existsSync(join(reposDir, targetRepo))) return targetRepo;
-      }
-      match = url.match(/^https?:\/\/([^/]+)\/(.+?)(?:\.git)?$/);
-      if (match) {
-        const targetRepo = `${match[1]}/${match[2]}`;
-        if (existsSync(join(reposDir, targetRepo))) return targetRepo;
-      }
-    }
-    // Fallback: use the first repo found
-    const { readdirSync } = await import("node:fs");
-    const hosts = readdirSync(reposDir);
-    for (const host of hosts) {
-      const owners = readdirSync(join(reposDir, host));
-      for (const owner of owners) {
-        const repos = readdirSync(join(reposDir, host, owner));
-        for (const repo of repos) {
-          const targetRepo = `${host}/${owner}/${repo}`;
-          if (existsSync(join(reposDir, targetRepo, "manifest.json"))) {
-            return targetRepo;
-          }
-        }
-      }
-    }
-  }
-  throw new Error("Could not determine target repo. Run `forkhub init` first.");
-}
-
 export async function runSatisfied(options: SatisfiedOptions = {}): Promise<SatisfiedResult> {
   if (!(await isGitRepo())) {
     throw new Error("Not a git repository. Run from inside your fork's checkout.");
@@ -100,7 +63,7 @@ export async function runSatisfied(options: SatisfiedOptions = {}): Promise<Sati
 
   const draftPath = join(process.cwd(), DRAFT_FILE);
   if (!existsSync(draftPath)) {
-    throw new Error("No draft file found. Run `forkhub draft \"<intent>\"` first.");
+    throw new Error('No draft file found. Run `forkhub draft "<intent>"` first.');
   }
 
   const branch = await currentBranch();
@@ -216,10 +179,7 @@ bun test
   );
 
   const { generateVerifySh } = await import("./verify");
-  await Bun.write(
-    join(patchDir, "verify.sh"),
-    generateVerifySh("bun test", patchId),
-  );
+  await Bun.write(join(patchDir, "verify.sh"), generateVerifySh("bun test", patchId));
 
   const manifestPath = join(repoDir, "manifest.json");
   const manifest = JSON.parse(await Bun.file(manifestPath).text());
@@ -238,25 +198,31 @@ bun test
   let tag: string | null = null;
 
   if (!options.skipPort) {
-    const fhBranchResult = await gitExec(["rev-parse", "--verify", "forkhub/main"]);
-    if (fhBranchResult.exitCode !== 0) {
+    if (!(await refExists("forkhub/main"))) {
       await gitOrThrow(["branch", "forkhub/main", upstreamSha]);
     }
     await checkout("forkhub/main");
+    const fhTipBefore = await currentSha();
     try {
       await cherryPick(branch);
       forkhubMainUpdated = true;
 
-      const upstreamTagResult = await gitExec(["describe", "--tags", "--abbrev=0", upstreamSha]);
-      const upstreamTag = upstreamTagResult.exitCode === 0 ? upstreamTagResult.stdout : "v0.0.0";
-
-      const fhTagsResult = await gitExec(["tag", "--list", `${upstreamTag}-fh*`]);
-      const fhCount = fhTagsResult.stdout ? fhTagsResult.stdout.split("\n").length : 0;
-      tag = `${upstreamTag}-fh${fhCount + 1}`;
+      const pattern = await resolveTagPattern(forkhubDir);
+      tag = await deriveNextFhTag(process.cwd(), pattern);
       await gitOrThrow(["tag", tag]);
+
+      const portedCommits = (
+        await gitExec(["log", "--format=%H", `${fhTipBefore}..forkhub/main`])
+      ).stdout
+        .split("\n")
+        .filter(Boolean);
+      manifest.patches[patchId].commit_shas = portedCommits.reverse();
+      await Bun.write(join(repoDir, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
     } catch (err) {
       await gitExec(["cherry-pick", "--abort"]);
-      throw new Error(`Cherry-pick failed (sibling conflict?). Patch saved to .forkhub but NOT ported to forkhub/main. Use --skip-port to save without porting. Error: ${err instanceof Error ? err.message : err}`);
+      throw new Error(
+        `Cherry-pick failed (sibling conflict?). Patch saved to .forkhub but NOT ported to forkhub/main. Use --skip-port to save without porting. Error: ${err instanceof Error ? err.message : err}`,
+      );
     }
 
     await checkout(branch);

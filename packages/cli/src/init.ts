@@ -1,18 +1,14 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import {
-  gitExec,
-  gitOrThrow,
-  getRemoteUrl,
-  listRemotes,
-  isGitRepo,
-} from "./git";
+import { gitExec, gitOrThrow, getRemoteUrl, listRemotes, isGitRepo } from "./git";
 
 export type InitOptions = {
   forkhubDir?: string;
   upstreamRemote?: string;
   forkRemote?: string;
   target?: string;
+  /** Channel/track glob for consumer + producer tag handling. */
+  tagPattern?: string;
 };
 
 export type InitResult = {
@@ -154,6 +150,8 @@ export async function runInit(options: InitOptions = {}): Promise<InitResult> {
           schedule: "on-upstream-release",
           token_budget_per_run: 100000,
           on_budget_exceed: "pause",
+          tag_pattern: options.tagPattern ?? "v*-fh*",
+          drift_against: "branch",
           patches: {},
           apply_order: [],
           slug_aliases: {},

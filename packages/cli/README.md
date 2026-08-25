@@ -19,9 +19,9 @@ AND your feature. **Now you can have both.**
 upstream/main    ─────●─────●─────●─────►  (v1.0.0, v1.1.0, v2.0.0, v2.1.0)
                                │
                                └─ your patch: --cheat flag (rejected PR)
-                                  
+
 your fork       ─────●─────●─────●─────►  (frozen at v2.0.0 + your patch)
-                                  
+
 gap: v2.1.0 features you don't have
 ```
 
@@ -87,19 +87,29 @@ forkhub watch     # daemon-side: auto-detect drift, generate bundles, apply
 
 ## Commands
 
-| Command | Purpose |
-|---|---|
-| `init` | Set up `.forkhub` repo + config |
-| `draft "<intent>"` | Create a `*` branch + draft INTENT.md |
-| `satisfied` | Finalize intent, capture diff, port to `forkhub/main`, tag |
-| `import <github-url>` | Import a patch from another user's `.forkhub` |
-| `re-derive <patch-id>` | Generate context bundle for AI re-derivation |
-| `apply <bundle-path>` | Apply realization from bundle (with verify gate) |
-| `drift-check` | Detect drift (with target_area skip for cost optimization) |
-| `watch [--once] [--interval N]` | Daemon: auto-detect drift + generate bundles + apply |
-| `update [--tag <tag>]` | Consumer: advance to latest tag |
-| `rollback` | Consumer: roll back to previous tag |
-| `status` | Show current state |
+| Command                                    | Purpose                                                                                                                       |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| `init`                                     | Set up `.forkhub` repo + config                                                                                               |
+| `draft "<intent>"`                         | Create a `*` branch + draft INTENT.md                                                                                         |
+| `satisfied`                                | Finalize intent, capture diff, port to `forkhub/main`, tag                                                                    |
+| `advance [--to <ref>] [--verify]`          | Fast-forward without AI: cherry-pick patch commits onto the new upstream base; escalates to re-derivation bundles on conflict |
+| `import <github-url>`                      | Import a patch from another user's `.forkhub`                                                                                 |
+| `re-derive <patch-id>`                     | Generate context bundle for AI re-derivation                                                                                  |
+| `apply <bundle-path>`                      | Apply realization from bundle (with verify gate)                                                                              |
+| `drift-check`                              | Detect drift (with target_area skip for cost optimization)                                                                    |
+| `watch [--once] [--interval N]`            | Daemon: auto-detect drift + generate bundles + apply                                                                          |
+| `update [--tag <tag>]`                     | Consumer: advance to latest tag on your track                                                                                 |
+| `rollback`                                 | Consumer: roll back to previous tag                                                                                           |
+| `push [--remote <name>] [--with-metadata]` | Push `forkhub/main` + track tags to a remote                                                                                  |
+| `reconcile [--tag <tag>] [--dry-run]`      | Sync manifest state from the consumed tag's history                                                                           |
+| `status`                                   | Show current state                                                                                                            |
+
+### Channels & tracks
+
+Set `tag_pattern` in `manifest.json` (e.g. `"v*-nightly*"`) to pin a release
+track — consumers only see tags on that pattern and producers derive new tags
+on it. Set `drift_against: "tag"` to measure drift against the latest upstream
+release tag instead of the branch tip.
 
 ## How it works
 
@@ -158,6 +168,7 @@ forkhub watch --interval 300  # check every 5 minutes
 ```
 
 Loops:
+
 1. Detect drift (per-patch target_area check, skip if untouched)
 2. Generate context bundle for drifted patches
 3. Wait for AI to produce REALIZATION/realization.diff

@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Bun](https://img.shields.io/badge/runtime-Bun%20%E2%89%A51.3-f472b6)](https://bun.sh)
 
-**forkhub** is an open-source CLI that maintains Git forks with custom patches **without freezing them**. Declare each local change once as an **intent** (a natural-language spec + acceptance criteria), and an AI coding agent re-derives it against every new upstream release. You get the maintainer's latest features *and* your rejected-PR fixes — automatically.
+**forkhub** is an open-source CLI that maintains Git forks with custom patches **without freezing them**. Declare each local change once as an **intent** (a natural-language spec + acceptance criteria), and an AI coding agent re-derives it against every new upstream release. You get the maintainer's latest features _and_ your rejected-PR fixes — automatically.
 
 > **Patches are intent, not diffs.** Diffs go stale on every upstream commit. Intent survives.
 
@@ -91,22 +91,34 @@ Requires [Bun](https://bun.sh) ≥ 1.3 and `git`.
 
 ## Commands
 
-| Command | Purpose |
-|---|---|
-| `init` | Set up `.forkhub` repo + config |
-| `draft "<intent>"` | Create a `*` branch + draft INTENT.md |
-| `satisfied` | Finalize intent, capture diff, port to `forkhub/main`, tag |
-| `pr [--draft] [--base <branch>]` | Push branch to your fork + open PR upstream |
-| `publish` | Push your `.forkhub` intent repo public so others can import |
-| `import <url>` | Import a patch intent from another user's `.forkhub` |
-| `search` | Find published patches by author or target repo |
-| `re-derive <patch-id>` | Generate context bundle for AI re-derivation |
-| `apply <bundle-path>` | Apply realization from bundle (with verify gate) |
-| `drift-check` | Detect which patches drifted from upstream |
-| `watch [--once] [--interval <sec>]` | Daemon: auto-detect drift + regenerate + apply |
-| `update [--tag]` | Consumer: advance to latest tag |
-| `rollback` | Consumer: roll back to previous tag |
-| `list` / `status` / `pr-status` / `cleanup` | Inspect & maintain |
+| Command                                     | Purpose                                                                                                                       |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `init`                                      | Set up `.forkhub` repo + config                                                                                               |
+| `draft "<intent>"`                          | Create a `*` branch + draft INTENT.md                                                                                         |
+| `satisfied`                                 | Finalize intent, capture diff, port to `forkhub/main`, tag                                                                    |
+| `advance [--to <ref>] [--verify]`           | Fast-forward without AI: cherry-pick patch commits onto the new upstream base; escalates to re-derivation bundles on conflict |
+| `pr [--draft] [--base <branch>]`            | Push branch to your fork + open PR upstream                                                                                   |
+| `publish`                                   | Push your `.forkhub` intent repo public so others can import                                                                  |
+| `push [--remote] [--with-metadata]`         | Push `forkhub/main` + track tags to your remote (local tags stay invisible to other machines otherwise)                       |
+| `import <url>`                              | Import a patch intent from another user's `.forkhub`                                                                          |
+| `search`                                    | Find published patches by author or target repo                                                                               |
+| `re-derive <patch-id>`                      | Generate context bundle for AI re-derivation                                                                                  |
+| `apply <bundle-path>`                       | Apply realization from bundle (with verify gate)                                                                              |
+| `drift-check`                               | Detect which patches drifted from upstream                                                                                    |
+| `watch [--once] [--interval <sec>]`         | Daemon: auto-detect drift + regenerate + apply                                                                                |
+| `update [--tag]`                            | Consumer: advance to latest tag on your track                                                                                 |
+| `rollback`                                  | Consumer: roll back to previous tag                                                                                           |
+| `reconcile [--tag] [--dry-run]`             | Sync manifest state from a consumed tag's history (e.g. after hand-made tags)                                                 |
+| `list` / `status` / `pr-status` / `cleanup` | Inspect & maintain                                                                                                            |
+
+### Channels & tracks
+
+Set `tag_pattern` in `manifest.json` (e.g. `"v*-nightly*"`) to pin a release
+track: `update`/`rollback`/`status` only see matching tags, `satisfied`/`apply`
+derive new tags on the same track, and explicit `--tag` jumps outside the
+pattern are refused. Set `drift_against: "tag"` to measure drift against the
+latest upstream **release tag** instead of the branch tip — useful when you
+build from tags and main contains unreleased, unbuildable commits.
 
 ## How it works
 
@@ -170,7 +182,7 @@ A CLI + workflow for maintaining Git forks that carry custom patches. Patches ar
 Developers whose PR was rejected/stalled upstream but who still need upstream's ongoing fixes; teams running internal forks of OSS; anyone tired of manual rebasing onto new releases.
 
 **How is forkhub different from `git rebase` or `patch-package`?**
-Rebase replays stale diffs into conflicts; `patch-package` applies static diffs at install time and breaks when code moves. forkhub stores *what you want* (intent + acceptance criteria), so an agent produces a fresh implementation each release.
+Rebase replays stale diffs into conflicts; `patch-package` applies static diffs at install time and breaks when code moves. forkhub stores _what you want_ (intent + acceptance criteria), so an agent produces a fresh implementation each release.
 
 **Does forkhub require an AI agent?**
 Re-derivation needs one (OpenCode, Claude Code, Codex, …) via the `/forkhub` skill. Everything else — init, drift detection, tagging, update, rollback, publishing — is plain CLI.

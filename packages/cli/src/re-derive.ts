@@ -1,17 +1,11 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { join, basename } from "node:path";
-import {
-  isGitRepo,
-  gitOrThrow,
-  gitExec,
-  shortSha,
-  diff,
-  diffNameOnly,
-  currentSha,
-} from "./git";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { isGitRepo, gitOrThrow, gitExec, shortSha } from "./git";
+import { findTargetRepo } from "./target-repo";
 
 export type ReDeriveOptions = {
   forkhubDir?: string;
+  targetRepo?: string;
   force?: boolean;
 };
 
@@ -26,13 +20,6 @@ function ensureDir(dir: string): void {
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
   }
-}
-
-function copyDir(src: string, dest: string): void {
-  if (!existsSync(src)) return;
-  ensureDir(dest);
-  const proc = Bun.spawn(["cp", "-r", `${src}/.`, dest], { stdout: "pipe", stderr: "pipe" });
-  proc.exited.then(() => {});
 }
 
 function copyFiles(filePaths: string[], srcBase: string, destDir: string): void {
@@ -52,37 +39,6 @@ function dirname(path: string): string {
   return idx === -1 ? "." : path.slice(0, idx);
 }
 
-async function findTargetRepo(forkhubDir: string, forkCwd: string): Promise<string | null> {
-  const reposDir = join(forkhubDir, "repos");
-  if (!existsSync(reposDir)) return null;
-  const { getRemoteUrl, listRemotes } = await import("./git");
-  for (const remote of await listRemotes(forkCwd)) {
-    const url = await getRemoteUrl(remote, forkCwd);
-    if (!url) continue;
-    let match = url.match(/^git@([^:]+):(.+?)(?:\.git)?$/);
-    if (match) {
-      const targetRepo = `${match[1]}/${match[2]}`;
-      if (existsSync(join(reposDir, targetRepo, "manifest.json"))) return targetRepo;
-    }
-    match = url.match(/^https?:\/\/([^/]+)\/(.+?)(?:\.git)?$/);
-    if (match) {
-      const targetRepo = `${match[1]}/${match[2]}`;
-      if (existsSync(join(reposDir, targetRepo, "manifest.json"))) return targetRepo;
-    }
-  }
-  const hosts = readdirSync(reposDir);
-  for (const host of hosts) {
-    for (const owner of readdirSync(join(reposDir, host))) {
-      for (const repo of readdirSync(join(reposDir, host, owner))) {
-        if (existsSync(join(reposDir, host, owner, repo, "manifest.json"))) {
-          return `${host}/${owner}/${repo}`;
-        }
-      }
-    }
-  }
-  return null;
-}
-
 function readManifest(repoDir: string): any {
   return JSON.parse(readFileSync(join(repoDir, "manifest.json"), "utf-8"));
 }
@@ -92,17 +48,27 @@ function readIntentTargetArea(intentPath: string): string[] {
   const content = readFileSync(intentPath, "utf-8");
   const match = content.match(/^target_area:\s*\[(.+?)\]/m);
   if (!match?.[1]) return [];
-  return match[1].split(",").map((s) => s.trim().replace(/["']/g, "")).filter(Boolean);
+  return match[1]
+    .split(",")
+    .map((s) => s.trim().replace(/["']/g, ""))
+    .filter(Boolean);
 }
 
 function getUpstreamLocalPath(remoteUrl: string): string | null {
-  if (remoteUrl.startsWith("git@") || remoteUrl.startsWith("https://") || remoteUrl.startsWith("http://")) {
+  if (
+    remoteUrl.startsWith("git@") ||
+    remoteUrl.startsWith("https://") ||
+    remoteUrl.startsWith("http://")
+  ) {
     return null;
   }
   return remoteUrl.replace(/\.git$/, "");
 }
 
-export async function runReDerive(patchId: string, options: ReDeriveOptions = {}): Promise<ReDeriveResult> {
+export async function runReDerive(
+  patchId: string,
+  options: ReDeriveOptions = {},
+): Promise<ReDeriveResult> {
   if (!(await isGitRepo())) {
     throw new Error("Not a git repository. Run from inside your fork's checkout.");
   }
@@ -112,7 +78,7 @@ export async function runReDerive(patchId: string, options: ReDeriveOptions = {}
     throw new Error(".forkhub repo not found. Run `forkhub init` first.");
   }
 
-  const targetRepo = await findTargetRepo(forkhubDir, process.cwd());
+  const targetRepo = options.targetRepo ?? (await findTargetRepo(forkhubDir, process.cwd()));
   if (!targetRepo) {
     throw new Error("Could not determine target repo. Run `forkhub init` first.");
   }
@@ -140,9 +106,10 @@ export async function runReDerive(patchId: string, options: ReDeriveOptions = {}
   }
   const upstreamSha = await gitOrThrow(["rev-parse", upstreamRef]);
 
-  const status: ReDeriveResult["status"] = lastRealizedSha && shortSha(lastRealizedSha) === shortSha(upstreamSha)
-    ? "current"
-    : "needs-derivation";
+  const status: ReDeriveResult["status"] =
+    lastRealizedSha && shortSha(lastRealizedSha) === shortSha(upstreamSha)
+      ? "current"
+      : "needs-derivation";
 
   if (status === "current" && !options.force) {
     return { patchId, bundlePath: "", status: "current", filesInBundle: [] };
@@ -158,7 +125,10 @@ export async function runReDerive(patchId: string, options: ReDeriveOptions = {}
   for (const src of ["INTENT.md", "ACCEPTANCE.md", "reference.diff", "attempts.jsonl"]) {
     const srcPath = join(patchDir, src);
     if (existsSync(srcPath)) {
-      const proc = Bun.spawn(["cp", srcPath, join(bundlePath, src)], { stdout: "pipe", stderr: "pipe" });
+      const proc = Bun.spawn(["cp", srcPath, join(bundlePath, src)], {
+        stdout: "pipe",
+        stderr: "pipe",
+      });
       await proc.exited;
       filesInBundle.push(src);
     }
@@ -183,11 +153,12 @@ export async function runReDerive(patchId: string, options: ReDeriveOptions = {}
   if (targetArea.length > 0 && lastRealizedSha) {
     const areaArgs = targetArea.flatMap((a) => ["--", a]);
     const diffSummary = await gitOrThrow([
-      "diff", "--stat", `${lastRealizedSha}..${upstreamRef}`, ...areaArgs,
+      "diff",
+      "--stat",
+      `${lastRealizedSha}..${upstreamRef}`,
+      ...areaArgs,
     ]);
-    const diffFull = await gitOrThrow([
-      "diff", `${lastRealizedSha}..${upstreamRef}`, ...areaArgs,
-    ]);
+    const diffFull = await gitOrThrow(["diff", `${lastRealizedSha}..${upstreamRef}`, ...areaArgs]);
     const summary = `# Drift Summary
 
 ## What changed in upstream's target_area
@@ -228,13 +199,10 @@ ${diffFull || "(no diff)"}
     }
   }
 
-  const forkFiles = existsSync(join(process.cwd(), "forkhub/main"))
-    ? ["forkhub/main"]
-    : [];
   if (targetArea.length > 0) {
     const fhMainExists = await gitExec(["rev-parse", "--verify", "forkhub/main"]);
     if (fhMainExists.exitCode === 0) {
-      const currentBranch = (await gitOrThrow(["rev-parse", "--abbrev-ref", "HEAD"]));
+      const currentBranch = await gitOrThrow(["rev-parse", "--abbrev-ref", "HEAD"]);
       if (currentBranch !== "forkhub/main") {
         await gitOrThrow(["checkout", "--quiet", "forkhub/main"]);
       }

@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { isGitRepo, gitExec, gitOrThrow, currentBranch, getRemoteUrl, listRemotes } from "./git";
+import { isGitRepo, gitExec, currentBranch } from "./git";
+import { findTargetRepo } from "./target-repo";
 
 export type PrOptions = {
   forkhubDir?: string;
@@ -20,41 +21,6 @@ export type PrResult = {
   error: string | null;
 };
 
-async function findTargetRepo(forkhubDir: string, forkCwd: string): Promise<string> {
-  if (existsSync(join(forkhubDir, "repos"))) {
-    const reposDir = join(forkhubDir, "repos");
-    for (const remote of await listRemotes(forkCwd)) {
-      const url = await getRemoteUrl(remote, forkCwd);
-      if (!url) continue;
-      let match = url.match(/^git@([^:]+):(.+?)(?:\.git)?$/);
-      if (match) {
-        const targetRepo = `${match[1]}/${match[2]}`;
-        if (existsSync(join(reposDir, targetRepo))) return targetRepo;
-      }
-      match = url.match(/^https?:\/\/([^/]+)\/(.+?)(?:\.git)?$/);
-      if (match) {
-        const targetRepo = `${match[1]}/${match[2]}`;
-        if (existsSync(join(reposDir, targetRepo))) return targetRepo;
-      }
-    }
-    const { readdirSync } = await import("node:fs");
-    const hosts = readdirSync(reposDir);
-    for (const host of hosts) {
-      const owners = readdirSync(join(reposDir, host));
-      for (const owner of owners) {
-        const repos = readdirSync(join(reposDir, host, owner));
-        for (const repo of repos) {
-          const targetRepo = `${host}/${owner}/${repo}`;
-          if (existsSync(join(reposDir, targetRepo, "manifest.json"))) {
-            return targetRepo;
-          }
-        }
-      }
-    }
-  }
-  throw new Error("Could not determine target repo. Run `forkhub init` first.");
-}
-
 async function loadManifest(forkhubDir: string, targetRepo: string): Promise<any> {
   const manifestPath = join(forkhubDir, "repos", targetRepo, "manifest.json");
   if (!existsSync(manifestPath)) {
@@ -63,7 +29,9 @@ async function loadManifest(forkhubDir: string, targetRepo: string): Promise<any
   return JSON.parse(readFileSync(manifestPath, "utf8"));
 }
 
-async function runGh(args: string[]): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+async function runGh(
+  args: string[],
+): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   const proc = Bun.spawn(["gh", ...args], {
     stdout: "pipe",
     stderr: "pipe",
@@ -110,7 +78,6 @@ export async function runPr(options: PrOptions = {}): Promise<PrResult> {
   }
 
   const forkRemote = manifest.fork_remote as string;
-  const upstreamRemote = (manifest.upstream_remote as string) ?? "upstream";
 
   if (!options.noPush) {
     const pushResult = await gitExec(["push", "-u", forkRemote, branch]);
@@ -137,10 +104,15 @@ export async function runPr(options: PrOptions = {}): Promise<PrResult> {
         const sections: string[] = [];
         const intentMatch = intentContent.match(/## Intent\s*\n([\s\S]*?)(?=\n## |\n---|\s*$)/);
         if (intentMatch && intentMatch[1]) sections.push(`## Intent\n\n${intentMatch[1].trim()}`);
-        const nonNegMatch = intentContent.match(/## Non-negotiables\s*\n([\s\S]*?)(?=\n## |\n---|\s*$)/);
-        if (nonNegMatch && nonNegMatch[1]) sections.push(`## Non-negotiables\n\n${nonNegMatch[1].trim()}`);
+        const nonNegMatch = intentContent.match(
+          /## Non-negotiables\s*\n([\s\S]*?)(?=\n## |\n---|\s*$)/,
+        );
+        if (nonNegMatch && nonNegMatch[1])
+          sections.push(`## Non-negotiables\n\n${nonNegMatch[1].trim()}`);
         if (sections.length > 0) {
-          prBody = sections.join("\n\n") + "\n\n---\n\nManaged via [forkhub](https://github.com/ImBIOS/forkhub).";
+          prBody =
+            sections.join("\n\n") +
+            "\n\n---\n\nManaged via [forkhub](https://github.com/ImBIOS/forkhub).";
         }
       }
     }
@@ -151,12 +123,18 @@ export async function runPr(options: PrOptions = {}): Promise<PrResult> {
   const base = options.base ?? "main";
   const draftFlag = options.draft ? "--draft" : "";
   const args = [
-    "pr", "create",
-    "--base", base,
-    "--head", branch,
-    "--repo", targetRepo,
-    "--title", prTitle,
-    "--body", prBody,
+    "pr",
+    "create",
+    "--base",
+    base,
+    "--head",
+    branch,
+    "--repo",
+    targetRepo,
+    "--title",
+    prTitle,
+    "--body",
+    prBody,
   ];
   if (draftFlag) args.push(draftFlag);
 
@@ -164,10 +142,13 @@ export async function runPr(options: PrOptions = {}): Promise<PrResult> {
   if (ghResult.exitCode === 127 || (ghResult.stderr && ghResult.stderr.includes("not found"))) {
     const fallback = await gitExec(args);
     if (fallback.exitCode !== 127) {
-      Object.assign(ghResult, { stdout: fallback.stdout, stderr: fallback.stderr, exitCode: fallback.exitCode });
+      Object.assign(ghResult, {
+        stdout: fallback.stdout,
+        stderr: fallback.stderr,
+        exitCode: fallback.exitCode,
+      });
     }
   }
-
 
   let prUrl: string | null = null;
   let prNumber: number | null = null;
@@ -182,7 +163,15 @@ export async function runPr(options: PrOptions = {}): Promise<PrResult> {
   } else {
     error = ghResult.stderr || ghResult.stdout;
     if (error.includes("already exists") || error.includes("A pull request already exists")) {
-      const existingResult = await gitExec(["pr", "view", branch, "--json", "url,number", "--jq", ".url,.number"]);
+      const existingResult = await gitExec([
+        "pr",
+        "view",
+        branch,
+        "--json",
+        "url,number",
+        "--jq",
+        ".url,.number",
+      ]);
       if (existingResult.exitCode === 0) {
         const lines = existingResult.stdout.trim().split("\n");
         if (lines[0]) prUrl = lines[0];
