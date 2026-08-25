@@ -13,6 +13,7 @@ export type DriftCheckOptions = {
 
 export type PatchDriftStatus = {
   patchId: string;
+  title?: string | null;
   status: "current" | "drifted" | "unknown" | "upstreamed";
   lastRealizedSha: string;
   targetArea: string[];
@@ -24,6 +25,8 @@ export type PatchDriftStatus = {
     url: string;
     state: "open" | "merged" | "closed";
     mergeCommit?: string;
+    /** false when the PR merged somewhere other than the tracked upstream branch */
+    mergeOnTrackedBranch?: boolean;
   } | null;
 };
 
@@ -56,16 +59,19 @@ function readUpstreamConfig(repoDir: string): any {
   return JSON.parse(readFileSync(upstreamJsonPath, "utf-8"));
 }
 
-function readIntentTargetArea(repoDir: string, patchId: string): string[] {
+function readIntentMeta(repoDir: string, patchId: string): { title: string | null; targetArea: string[] } {
   const intentPath = join(repoDir, "patches", patchId, "INTENT.md");
-  if (!existsSync(intentPath)) return [];
+  if (!existsSync(intentPath)) return { title: null, targetArea: [] };
   const content = readFileSync(intentPath, "utf-8");
-  const match = content.match(/^target_area:\s*\[(.+?)\]/m);
-  if (!match?.[1]) return [];
-  return match[1]
-    .split(",")
-    .map((s) => s.trim().replace(/["']/g, ""))
-    .filter(Boolean);
+  const titleMatch = content.match(/^title:\s*(.+)$/m);
+  const areaMatch = content.match(/^target_area:\s*\[(.+?)\]/m);
+  const targetArea = areaMatch?.[1]
+    ? areaMatch[1]
+        .split(",")
+        .map((s) => s.trim().replace(/["']/g, ""))
+        .filter(Boolean)
+    : [];
+  return { title: titleMatch?.[1]?.trim().replace(/["']/g, "") ?? null, targetArea };
 }
 
 async function findTargetRepo(forkhubDir: string, forkCwd: string): Promise<string> {
@@ -120,7 +126,7 @@ async function checkUpstreamPrState(
     stdout: "pipe",
     stderr: "pipe",
   });
-  const [stdout, stderr] = await Promise.all([
+  const [stdout] = await Promise.all([
     new Response(proc.stdout).text(),
     new Response(proc.stderr).text(),
   ]);
@@ -178,7 +184,8 @@ export async function runDriftCheck(options: DriftCheckOptions = {}): Promise<Dr
   for (const patchId of patchIds) {
     const patchInfo = manifest.patches[patchId];
     const lastRealizedSha = patchInfo.last_realized_against_commit;
-    const targetArea = readIntentTargetArea(repoDir, patchId);
+    const intentMeta = readIntentMeta(repoDir, patchId);
+    const targetArea = intentMeta.targetArea;
     const appliedPr = patchInfo.applied_upstream_pr;
 
     let status: PatchDriftStatus["status"] = "unknown";
@@ -199,12 +206,23 @@ export async function runDriftCheck(options: DriftCheckOptions = {}): Promise<Dr
           mergeCommit: prState.mergeCommit,
         };
         if (prState.state === "merged") {
-          status = "upstreamed";
-          // If we have the merge commit, advance last_realized to it so the
-          // next drift cycle starts from the post-merge state.
-          if (prState.mergeCommit) {
-            patchInfo.last_realized_against_commit = shortSha(prState.mergeCommit);
+          // Only trust the merge commit when it actually landed on the
+          // tracked upstream branch — `fh pr --base` allows merging a PR
+          // elsewhere, and advancing last_realized to such a commit would
+          // silently corrupt drift tracking.
+          const mergeOnTracked =
+            !!prState.mergeCommit &&
+            (
+              await gitExec(["merge-base", "--is-ancestor", prState.mergeCommit, upstreamSha])
+            ).exitCode === 0;
+          if (mergeOnTracked) {
+            status = "upstreamed";
+            // Advance last_realized to the merge commit so the next drift
+            // cycle starts from the post-merge state.
+            patchInfo.last_realized_against_commit = shortSha(prState.mergeCommit!);
             manifestDirty = true;
+          } else {
+            prInfo.mergeOnTrackedBranch = false;
           }
         }
       }
@@ -244,6 +262,7 @@ export async function runDriftCheck(options: DriftCheckOptions = {}): Promise<Dr
 
     patchStatuses.push({
       patchId,
+      title: intentMeta.title,
       status,
       lastRealizedSha,
       targetArea,
@@ -276,48 +295,123 @@ export async function runDriftCheck(options: DriftCheckOptions = {}): Promise<Dr
   };
 }
 
+function truncate(text: string, max: number): string {
+  return text.length > max ? text.slice(0, max - 1) + "…" : text;
+}
+
+/** Strip C0/C1 control characters (incl. ESC) — INTENT.md fields are untrusted input. */
+function sanitize(text: string): string {
+  // eslint-disable-next-line no-control-regex
+  return text.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
+}
+
+function summarizeFiles(files: string[], max = 3): string {
+  if (files.length === 0) return "";
+  const shown = files.slice(0, max).join(", ");
+  const rest = files.length - Math.min(files.length, max);
+  return rest > 0 ? `${shown} (+${rest} more)` : shown;
+}
+
 export function formatDriftCheckResult(result: DriftCheckResult): string {
   const lines: string[] = [];
 
-  lines.push(`Upstream:  ${shortSha(result.upstreamSha)} ${result.upstreamAdvanced ? `(advanced from ${shortSha(result.lastKnownSha)})` : "(unchanged)"}`);
-  lines.push("");
+  const drifted = result.patches.filter((p) => p.status === "drifted");
+  const upstreamed = result.patches.filter((p) => p.status === "upstreamed");
+  const unknown = result.patches.filter((p) => p.status === "unknown");
+  const currentCount = result.summary.current;
+
+  const labelOf = (p: PatchDriftStatus): string => {
+    if (p.title) return `“${truncate(sanitize(p.title), 80)}”`;
+    return truncate(sanitize(p.patchId), 60);
+  };
+  const pidOf = (p: PatchDriftStatus): string => sanitize(p.patchId);
+
+  lines.push(
+    `Upstream: ${shortSha(result.upstreamSha)} ${
+      result.upstreamAdvanced ? `(advanced from ${shortSha(result.lastKnownSha)})` : "(unchanged since last check)"
+    }`,
+  );
 
   if (result.patches.length === 0) {
-    lines.push("No patches found.");
+    lines.push("");
+    lines.push("No intent patches tracked. Nothing to maintain.");
     return lines.join("\n");
   }
 
-  for (const patch of result.patches) {
-    const icon = patch.status === "current" ? "✓" : patch.status === "drifted" ? "⚠" : patch.status === "upstreamed" ? "✓" : "?";
-    lines.push(`${icon} ${patch.patchId}`);
-    lines.push(`   status:     ${patch.status}`);
-    lines.push(`   realized:   ${patch.lastRealizedSha ? shortSha(patch.lastRealizedSha) : "(not yet realized)"}`);
-    lines.push(`   target_area: [${patch.targetArea.join(", ")}]`);
+  lines.push(
+    `${result.summary.total} intent ${result.summary.total === 1 ? "patch" : "patches"}: ${drifted.length} need re-derivation · ${upstreamed.length} upstreamed · ${unknown.length} unclear · ${currentCount} current`,
+  );
+  lines.push("");
 
-    // Show upstream PR tracking info
-    if (patch.appliedUpstreamPr) {
-      const prState = patch.appliedUpstreamPr.state;
-      const prIcon = prState === "merged" ? "✓ merged" : prState === "open" ? "⏳ open" : "✗ closed";
-      lines.push(`   upstream PR: #${patch.appliedUpstreamPr.number} (${prIcon})`);
+  if (drifted.length > 0) {
+    lines.push("Needs re-derivation — upstream changed files these patches cover:");
+    lines.push("");
+    for (const [i, patch] of drifted.entries()) {
+      lines.push(`  ${i + 1}. ${labelOf(patch)}`);
+      lines.push(`      patch:    ${pidOf(patch)}`);
+      if (!patch.lastRealizedSha) {
+        lines.push("      reason:   imported but never realized against upstream yet");
+      } else if (patch.filesChangedInTargetArea.length > 0) {
+        lines.push(
+          `      reason:   ${patch.filesChangedInTargetArea.length} covered file(s) changed upstream since ${shortSha(patch.lastRealizedSha)}`,
+        );
+        lines.push(`                ${summarizeFiles(patch.filesChangedInTargetArea)}`);
+      } else {
+        lines.push("      reason:   target_area not declared — cannot prove it's still safe, treat as drifted");
+      }
+      if (patch.appliedUpstreamPr?.state === "open") {
+        lines.push(
+          `      upstream: PR #${patch.appliedUpstreamPr.number} still open — once merged, this patch becomes obsolete`,
+        );
+      } else if (patch.appliedUpstreamPr?.state === "closed") {
+        lines.push(`      upstream: PR #${patch.appliedUpstreamPr.number} was closed without merging`);
+      } else if (
+        patch.appliedUpstreamPr?.state === "merged" &&
+        patch.appliedUpstreamPr.mergeOnTrackedBranch === false
+      ) {
+        lines.push(
+          `      upstream: PR #${patch.appliedUpstreamPr.number} merged, but NOT on the tracked upstream branch — ignoring it`,
+        );
+      }
+      lines.push(`      fix:      fh re-derive ${pidOf(patch)}`);
+      lines.push("");
     }
+  }
 
-    if (patch.status === "drifted") {
-      lines.push(`   changed:    ${patch.filesChangedInTargetArea.join(", ")}`);
-    } else if (patch.status === "current" && patch.upstreamChanged) {
-      lines.push(`   skip:       target_area untouched (0 tokens)`);
+  if (upstreamed.length > 0) {
+    lines.push("Safe to drop — upstream now includes these patches:");
+    for (const patch of upstreamed) {
+      const merged = patch.appliedUpstreamPr?.mergeCommit
+        ? ` (merged as ${shortSha(patch.appliedUpstreamPr.mergeCommit)})`
+        : "";
+      const pr = patch.appliedUpstreamPr ? ` — #${patch.appliedUpstreamPr.number}${merged}` : "";
+      lines.push(`  • ${labelOf(patch)}${pr}`);
+      lines.push(`      patch: ${pidOf(patch)}`);
     }
     lines.push("");
   }
 
-  lines.push(`Summary: ${result.summary.total} patches, ${result.summary.current} current, ${result.summary.drifted} drifted`);
-  if (result.summary.wouldSkip > 0) {
-    lines.push(`         ${result.summary.wouldSkip} would be skipped (target_area untouched)`);
+  if (unknown.length > 0) {
+    lines.push("Unclear state — needs a human look:");
+    for (const patch of unknown) {
+      lines.push(`  • ${labelOf(patch)}`);
+      lines.push(`      patch: ${pidOf(patch)}`);
+    }
+    lines.push("");
   }
 
-  if (result.summary.drifted > 0) {
-    lines.push(`\nAction: ${result.summary.drifted} patch(es) need re-derivation.`);
+  if (drifted.length > 0) {
+    lines.push("What to do next:");
+    lines.push("  1. fh re-derive <patch-id>          regenerate the context bundle for each drifted patch");
+    lines.push("  2. point your AI agent at prompt.md in the bundle and let it fill");
+    lines.push("     REALIZATION/realization.diff (fh watch --agent can automate this)");
+    lines.push("  3. fh apply <bundle-path>           apply + tag when tests pass");
+  } else if (unknown.length > 0) {
+    lines.push("Everything else is current; only the unclear entries above need attention.");
+  } else if (upstreamed.length > 0) {
+    lines.push("All covered. Consider removing the upstreamed patches from .forkhub.");
   } else {
-    lines.push(`\nAll patches current. No action needed.`);
+    lines.push("All patches current. Nothing to do.");
   }
 
   return lines.join("\n");
