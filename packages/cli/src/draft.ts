@@ -1,6 +1,14 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { isGitRepo, gitOrThrow, currentBranch, createBranch, shortSha } from "./git";
+import {
+  isGitRepo,
+  gitOrThrow,
+  currentBranch,
+  createBranch,
+  shortSha,
+  detectDefaultBranch,
+  resolveBaseRef,
+} from "./git";
 import { slugify } from "./patch-id";
 
 export type DraftOptions = {
@@ -18,9 +26,32 @@ export type DraftResult = {
 
 const DRAFT_FILE = ".forkhub-draft.md";
 
+function readConfiguredBranch(forkhubDir: string): string | null {
+  const reposDir = join(forkhubDir, "repos");
+  if (!existsSync(reposDir)) return null;
+  try {
+    for (const host of readdirSync(reposDir)) {
+      for (const owner of readdirSync(join(reposDir, host))) {
+        for (const repo of readdirSync(join(reposDir, host, owner))) {
+          for (const file of ["manifest.json", "upstream.json"] as const) {
+            const p = join(reposDir, host, owner, repo, file);
+            if (!existsSync(p)) continue;
+            try {
+              const parsed = JSON.parse(readFileSync(p, "utf8"));
+              const b = parsed.upstream_main_branch;
+              if (typeof b === "string" && b) return b;
+            } catch {}
+          }
+        }
+      }
+    }
+  } catch {}
+  return null;
+}
+
 export async function runDraft(intent: string, options: DraftOptions = {}): Promise<DraftResult> {
   if (!intent) {
-    throw new Error("Intent description required. Usage: forkhub draft \"<intent>\"");
+    throw new Error('Intent description required. Usage: forkhub draft "<intent>"');
   }
 
   if (!(await isGitRepo())) {
@@ -37,7 +68,10 @@ export async function runDraft(intent: string, options: DraftOptions = {}): Prom
     throw new Error(`Currently on branch '${branch}'. Switch to main/master before drafting.`);
   }
 
-  const upstreamBranch = options.upstreamBranch ?? "main";
+  const upstreamBranch =
+    options.upstreamBranch ??
+    readConfiguredBranch(forkhubDir) ??
+    (await detectDefaultBranch(["upstream", "origin"]).catch(() => "main"));
   const slug = slugify(intent);
   if (!slug) {
     throw new Error("Could not generate slug from intent. Provide a more descriptive intent.");
@@ -46,12 +80,14 @@ export async function runDraft(intent: string, options: DraftOptions = {}): Prom
   const branchName = slug;
   const existingBranches = await gitOrThrow(["branch", "--list", branchName]);
   if (existingBranches) {
-    throw new Error(`Branch '${branchName}' already exists. Pick a different intent or delete the branch.`);
+    throw new Error(
+      `Branch '${branchName}' already exists. Pick a different intent or delete the branch.`,
+    );
   }
 
-  await createBranch(branchName, upstreamBranch);
+  await createBranch(branchName, await resolveBaseRef(upstreamBranch));
 
-  const baseSha = await gitOrThrow(["rev-parse", upstreamBranch]);
+  const baseSha = await gitOrThrow(["rev-parse", await resolveBaseRef(upstreamBranch)]);
   const draftPath = join(process.cwd(), DRAFT_FILE);
 
   const draftContent = `---
@@ -89,7 +125,13 @@ ${intent}
     gitignore = await Bun.file(gitignorePath).text();
   }
   if (!gitignore.includes(DRAFT_FILE)) {
-    gitignore = gitignore.trimEnd() + "\n" + (gitignore.length > 0 ? "\n" : "") + "# forkhub draft\n" + DRAFT_FILE + "\n";
+    gitignore =
+      gitignore.trimEnd() +
+      "\n" +
+      (gitignore.length > 0 ? "\n" : "") +
+      "# forkhub draft\n" +
+      DRAFT_FILE +
+      "\n";
     await Bun.write(gitignorePath, gitignore);
   }
 

@@ -45,7 +45,10 @@ export async function isDirty(cwd: string = process.cwd()): Promise<boolean> {
   return status.length > 0;
 }
 
-export async function getRemoteUrl(name: string, cwd: string = process.cwd()): Promise<string | null> {
+export async function getRemoteUrl(
+  name: string,
+  cwd: string = process.cwd(),
+): Promise<string | null> {
   const result = await gitExec(["remote", "get-url", name], cwd);
   return result.exitCode === 0 ? result.stdout : null;
 }
@@ -63,7 +66,11 @@ export async function checkout(ref: string, cwd: string = process.cwd()): Promis
   await gitOrThrow(["checkout", "--quiet", ref], cwd);
 }
 
-export async function createBranch(name: string, base: string, cwd: string = process.cwd()): Promise<void> {
+export async function createBranch(
+  name: string,
+  base: string,
+  cwd: string = process.cwd(),
+): Promise<void> {
   await gitOrThrow(["checkout", "-b", name, base], cwd);
 }
 
@@ -82,7 +89,10 @@ export async function stashPop(cwd: string = process.cwd()): Promise<boolean> {
   return result.exitCode === 0;
 }
 
-export async function listTags(pattern = "v*-fh*", cwd: string = process.cwd()): Promise<{ name: string; sha: string }[]> {
+export async function listTags(
+  pattern = "v*-fh*",
+  cwd: string = process.cwd(),
+): Promise<{ name: string; sha: string }[]> {
   const tagNames = await gitOrThrow(["tag", "--list", pattern, "--sort=-v:refname"], cwd);
   if (!tagNames) return [];
   const names = tagNames.split("\n").filter(Boolean);
@@ -94,12 +104,22 @@ export async function listTags(pattern = "v*-fh*", cwd: string = process.cwd()):
   return infos;
 }
 
-export async function diff(from: string, to: string, cwd: string = process.cwd(), ...extraArgs: string[]): Promise<string> {
+export async function diff(
+  from: string,
+  to: string,
+  cwd: string = process.cwd(),
+  ...extraArgs: string[]
+): Promise<string> {
   if (extraArgs[0] === "--") extraArgs.shift();
   return await gitOrThrow(["diff", `${from}..${to}`, ...extraArgs], cwd);
 }
 
-export async function diffNameOnly(from: string, to: string, cwd: string = process.cwd(), ...extraArgs: string[]): Promise<string[]> {
+export async function diffNameOnly(
+  from: string,
+  to: string,
+  cwd: string = process.cwd(),
+  ...extraArgs: string[]
+): Promise<string[]> {
   if (extraArgs[0] === "--") extraArgs.shift();
   const result = await gitOrThrow(["diff", "--name-only", `${from}..${to}`, ...extraArgs], cwd);
   return result ? result.split("\n").filter(Boolean) : [];
@@ -107,4 +127,86 @@ export async function diffNameOnly(from: string, to: string, cwd: string = proce
 
 export function shortSha(sha: string): string {
   return sha.slice(0, 7);
+}
+
+export async function localBranchExists(
+  branch: string,
+  cwd: string = process.cwd(),
+): Promise<boolean> {
+  const result = await gitExec(["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`], cwd);
+  return result.exitCode === 0;
+}
+
+export async function remoteBranchExists(
+  remote: string,
+  branch: string,
+  cwd: string = process.cwd(),
+): Promise<boolean> {
+  const result = await gitExec(
+    ["rev-parse", "--verify", "--quiet", `refs/remotes/${remote}/${branch}`],
+    cwd,
+  );
+  return result.exitCode === 0;
+}
+
+/**
+ * Detect the default branch of a remote without fetching the whole repo.
+ * 1. `git ls-remote --symref <remote> HEAD` → `ref: refs/heads/<branch>\tHEAD`
+ * 2. `git remote show <remote>` → `HEAD branch: <branch>`
+ * Returns null when offline or the remote is unreachable — callers must fall back.
+ */
+export async function detectRemoteDefaultBranch(
+  remote: string,
+  cwd: string = process.cwd(),
+): Promise<string | null> {
+  const lsRemote = await gitExec(["ls-remote", "--symref", remote, "HEAD"], cwd);
+  if (lsRemote.exitCode === 0) {
+    const match = lsRemote.stdout.match(/ref:\s*refs\/heads\/([^\s]+)\s+HEAD/);
+    if (match?.[1]) return match[1];
+  }
+  const show = await gitExec(["remote", "show", remote], cwd);
+  if (show.exitCode === 0) {
+    const match = show.stdout.match(/HEAD branch:\s*([^\s]+)/);
+    if (match?.[1]) return match[1];
+  }
+  return null;
+}
+
+/**
+ * Detect the repo's default branch, trying remotes in order then local branches.
+ * Never throws — falls back to "main".
+ */
+export async function detectDefaultBranch(
+  candidateRemotes: string[] = ["upstream", "origin"],
+  cwd: string = process.cwd(),
+): Promise<string> {
+  for (const remote of candidateRemotes) {
+    const url = await getRemoteUrl(remote, cwd);
+    if (!url) continue;
+    const detected = await detectRemoteDefaultBranch(remote, cwd);
+    if (detected) return detected;
+  }
+  if (await localBranchExists("main", cwd)) return "main";
+  if (await localBranchExists("master", cwd)) return "master";
+  try {
+    const current = await currentBranch(cwd);
+    if (current && current !== "HEAD") return current;
+  } catch {}
+  return "main";
+}
+
+/**
+ * Resolve a branch name to a rev that exists locally.
+ * Tries: bare branch → <remotes...>/<branch> → HEAD.
+ */
+export async function resolveBaseRef(
+  branch: string,
+  remotes: string[] = ["upstream", "origin"],
+  cwd: string = process.cwd(),
+): Promise<string> {
+  if (await localBranchExists(branch, cwd)) return branch;
+  for (const remote of remotes) {
+    if (await remoteBranchExists(remote, branch, cwd)) return `${remote}/${branch}`;
+  }
+  return "HEAD";
 }

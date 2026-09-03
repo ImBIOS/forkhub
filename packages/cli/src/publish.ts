@@ -17,7 +17,6 @@ export type PublishResult = {
 };
 
 async function findTargetRepoForPublish(forkhubDir: string, cwd: string): Promise<string | null> {
-  const { readdirSync } = await import("node:fs");
   const { getRemoteUrl, listRemotes } = await import("./git");
   const reposBase = join(forkhubDir, "repos");
   if (!existsSync(reposBase)) return null;
@@ -38,13 +37,17 @@ async function findTargetRepoForPublish(forkhubDir: string, cwd: string): Promis
   return null;
 }
 
-async function validatePatchesHavePrIssue(forkhubDir: string, allowMissingPr: boolean): Promise<void> {
+async function validatePatchesHavePrIssue(
+  forkhubDir: string,
+  allowMissingPr: boolean,
+): Promise<void> {
   if (allowMissingPr) return;
   const { readdirSync, readFileSync } = await import("node:fs");
   const reposBase = join(forkhubDir, "repos");
   if (!existsSync(reposBase)) return;
   const targetRepo = await findTargetRepoForPublish(forkhubDir, process.cwd());
-  const reposToCheck: Array<{ host: string; owner: string; repo: string; manifestPath: string }> = [];
+  const reposToCheck: Array<{ host: string; owner: string; repo: string; manifestPath: string }> =
+    [];
   if (targetRepo) {
     const parts = targetRepo.split("/");
     if (parts.length === 3) {
@@ -93,10 +96,26 @@ async function validatePatchesHavePrIssue(forkhubDir: string, allowMissingPr: bo
   for (const { host, owner, repo, manifestPath } of reposToCheck) {
     if (!existsSync(manifestPath)) continue;
     const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    const targetRepo = `${host}/${owner}/${repo}`;
     const patches = manifest.patches as Record<string, any> | undefined;
     if (!patches) continue;
-    const missing: string[] = [];
+    // Best-effort: a PR opened via `gh pr create` (not `fh pr`) leaves the
+    // manifest stale. Auto-link it by branch name so publish doesn't block.
+    const { autoLinkPrByBranch } = await import("./link-pr");
+    let manifestChanged = false;
     for (const [patchId, patch] of Object.entries(patches)) {
+      if (patch.status !== "applied" || patch.private) continue;
+      const pr = patch.applied_upstream_pr;
+      if (pr && typeof pr.number === "number" && pr.url) continue;
+      if (typeof patch.branch !== "string" || !patch.branch) continue;
+      const linked = await autoLinkPrByBranch(forkhubDir, targetRepo, patchId, patch.branch);
+      if (linked) manifestChanged = true;
+    }
+    const refreshed = manifestChanged ? JSON.parse(readFileSync(manifestPath, "utf8")) : manifest;
+    const refreshedPatches = refreshed.patches as Record<string, any> | undefined;
+    if (!refreshedPatches) continue;
+    const missing: string[] = [];
+    for (const [patchId, patch] of Object.entries(refreshedPatches)) {
       if (patch.status !== "applied") continue;
       if ((patch as any).private) continue;
       const pr = (patch as any).applied_upstream_pr;
@@ -106,7 +125,9 @@ async function validatePatchesHavePrIssue(forkhubDir: string, allowMissingPr: bo
         const reasons: string[] = [];
         if (!hasPr) reasons.push("missing PR (applied_upstream_pr.number/url)");
         if (!hasIssue) reasons.push("missing linked issue (applied_upstream_pr.issue)");
-        missing.push(`  - ${patchId} (${(patch as any).branch ?? "unknown branch"}): ${reasons.join(", ")}`);
+        missing.push(
+          `  - ${patchId} (${(patch as any).branch ?? "unknown branch"}): ${reasons.join(", ")}`,
+        );
       } else if (pr.state && pr.state !== "open") {
         missing.push(`  - ${patchId}: PR #${pr.number} is not open (state=${pr.state})`);
       }
@@ -119,7 +140,8 @@ async function validatePatchesHavePrIssue(forkhubDir: string, allowMissingPr: bo
           `Fix: for each patch, create an issue and PR in the upstream repo, then link them:\n` +
           `  1. gh issue create --repo ${host}/${owner}/${repo} --title "..." --body "..."\n` +
           `  2. git checkout <patch-branch> && fh pr  # pushes branch + opens PR + updates manifest\n` +
-          `  3. Ensure manifest.json has applied_upstream_pr with {number, url, issue, issue_number, state:"open"}\n\n` +
+          `  3. Or link an existing PR: fh link-pr <patch-id|branch> <pr-number|pr-url>\n` +
+          `  4. Ensure manifest.json has applied_upstream_pr with {number, url, issue, issue_number, state:"open"}\n\n` +
           `To bypass this check for private patches (not recommended), run:\n` +
           `  fh publish --allow-missing-pr\n` +
           `Or mark a patch as private in manifest.json (add "private": true).\n`,
@@ -179,8 +201,7 @@ export async function runPublish(options: PublishOptions = {}): Promise<PublishR
 
   // Commit
   const message =
-    options.message ??
-    `chore: sync patches (${new Date().toISOString().split("T")[0]})`;
+    options.message ?? `chore: sync patches (${new Date().toISOString().split("T")[0]})`;
   await gitOrThrow(["commit", "-m", message, "--no-allow-empty"], forkhubDir);
 
   // Push
