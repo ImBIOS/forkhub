@@ -2,6 +2,24 @@
 
 All notable changes to forkhub are documented here.
 
+## [Unreleased]
+
+### Added
+
+- `fh popular [--target <repo>] [--author <user>]` — most-starred patches
+  first, so maintainers see which community intent-patches to merge upstream
+- `fh search --sort stars` — order results by publisher-repo stars; every
+  result now shows a ★ stars popularity signal plus a ready `fh reuse` command
+- `fh reuse <url> [--agent <name>]` — import a published patch and build its
+  re-derivation bundle in one step (`import` + `re-derive` chained)
+- DISCOVERY flow in both agent skills (`skills/forkhub/SKILL.md`,
+  `.opencode/skills/forkhub/SKILL.md`): search → reuse → realize → apply → update
+
+### Fixed
+
+- Star-sorted search collects all candidates before slicing to `--limit`
+  (previously the limit truncated before sorting)
+
 ## [0.3.0] - 2026-09-03
 
 First generally-available release. Install via `npm install -g forkhub`

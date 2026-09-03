@@ -7,6 +7,8 @@ export type SearchResult = {
   patchId: string;
   title: string;
   targetRepo: string | null;
+  /** Stars on the publisher's `.forkhub` repo — popularity proxy. Null when unknown. */
+  stars: number | null;
 };
 
 export type SearchOptions = {
@@ -14,6 +16,17 @@ export type SearchOptions = {
   author?: string;
   query?: string;
   limit?: number;
+  /** Sort results by publisher repo stars (most popular first). */
+  sort?: "stars";
+};
+
+type Candidate = {
+  user: string;
+  repo: string;
+  branch: string;
+  path: string;
+  url: string;
+  stars: number | null;
 };
 
 const RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504]);
@@ -129,15 +142,9 @@ export async function runSearch(options: SearchOptions = {}): Promise<SearchResu
 
 async function searchByAuthor(author: string, options: SearchOptions): Promise<SearchResult[]> {
   const limit = options.limit ?? 20;
-  const candidates: Array<{
-    user: string;
-    repo: string;
-    branch: string;
-    path: string;
-    url: string;
-  }> = [];
+  const candidates: Candidate[] = [];
 
-  const pushTreeEntries = (tree: any, branch: string) => {
+  const pushTreeEntries = (tree: any, branch: string, stars: number | null) => {
     for (const entry of tree.tree ?? []) {
       if (
         entry.type === "blob" &&
@@ -150,6 +157,7 @@ async function searchByAuthor(author: string, options: SearchOptions): Promise<S
           branch,
           path: entry.path,
           url: `https://github.com/${author}/.forkhub/blob/${branch}/${entry.path}`,
+          stars,
         });
       }
     }
@@ -158,13 +166,14 @@ async function searchByAuthor(author: string, options: SearchOptions): Promise<S
   try {
     const meta: any = await githubApi(`/repos/${author}/.forkhub`);
     const defaultBranch = typeof meta.default_branch === "string" ? meta.default_branch : "main";
+    const stars = typeof meta.stargazers_count === "number" ? meta.stargazers_count : null;
     const tree: any = await githubApi(
       `/repos/${author}/.forkhub/git/trees/${defaultBranch}?recursive=1`,
     );
     if (tree.truncated || !tree.tree) {
       throw new Error("Tree too large or empty");
     }
-    pushTreeEntries(tree, defaultBranch);
+    pushTreeEntries(tree, defaultBranch, stars);
   } catch {
     const reposData: any = await githubApi(`/users/${author}/repos?per_page=100`);
     for (const r of reposData.filter((r: any) => r.name === ".forkhub")) {
@@ -184,6 +193,7 @@ async function searchByAuthor(author: string, options: SearchOptions): Promise<S
               branch: r.default_branch,
               path: entry.path,
               url: `https://github.com/${author}/.forkhub/blob/${r.default_branch}/${entry.path}`,
+              stars: typeof r.stargazers_count === "number" ? r.stargazers_count : null,
             });
           }
         }
@@ -202,14 +212,9 @@ async function searchByTargetRepo(
   const dotRepoSearch: any = await githubApi(
     `/search/repositories?q=${encodeURIComponent(targetRepo + " in:name .forkhub")}&per_page=20`,
   );
-  const candidates: Array<{
-    user: string;
-    repo: string;
-    branch: string;
-    path: string;
-    url: string;
-  }> = [];
+  const candidates: Candidate[] = [];
   for (const r of dotRepoSearch.items ?? []) {
+    const stars = typeof r.stargazers_count === "number" ? r.stargazers_count : null;
     try {
       const tree: any = await githubApi(
         `/repos/${r.full_name}/git/trees/${r.default_branch}?recursive=1`,
@@ -227,6 +232,7 @@ async function searchByTargetRepo(
             branch: r.default_branch,
             path: entry.path,
             url: `https://github.com/${r.full_name}/blob/${r.default_branch}/${entry.path}`,
+            stars,
           });
         }
       }
@@ -236,7 +242,7 @@ async function searchByTargetRepo(
 }
 
 async function filterAndEnrich(
-  candidates: Array<{ user: string; repo: string; branch: string; path: string; url: string }>,
+  candidates: Candidate[],
   options: SearchOptions,
   limit: number,
 ): Promise<SearchResult[]> {
@@ -250,7 +256,11 @@ async function filterAndEnrich(
         continue;
     }
     results.push({ ...c, ...meta });
-    if (results.length >= limit) break;
+    if (options.sort !== "stars" && results.length >= limit) break;
+  }
+  if (options.sort === "stars") {
+    results.sort((a, b) => (b.stars ?? -1) - (a.stars ?? -1));
+    return results.slice(0, limit);
   }
   return results;
 }
@@ -265,7 +275,9 @@ export function formatSearchResults(results: SearchResult[]): string {
     lines.push(`    title:      ${r.title}`);
     lines.push(`    author:     ${r.user}`);
     if (r.targetRepo) lines.push(`    target:     ${r.targetRepo}`);
+    lines.push(`    stars:      ${r.stars ?? "?"}`);
     lines.push(`    import:     forkhub import ${r.url}`);
+    lines.push(`    reuse:      fh reuse ${r.url}`);
     lines.push("");
   }
   return lines.join("\n");

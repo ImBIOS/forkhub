@@ -92,24 +92,26 @@ Requires [Bun](https://bun.sh) ≥ 1.3 and `git`.
 
 ## Commands
 
-| Command                                 | Purpose                                                                                                 |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `init`                                  | Set up `.forkhub` repo + config                                                                         |
-| `draft "<intent>"`                      | Create a `*` branch + draft INTENT.md                                                                   |
-| `satisfied`                             | Finalize intent, capture diff, port to `forkhub/main`, tag                                              |
-| `pr [--draft] [--base <branch>]`        | Push branch to your fork + open PR upstream (defaults `--base` to the detected upstream default branch) |
-| `link-pr <patch-id\|branch> <pr#\|url>` | Link an existing upstream PR to a patch (if you opened it outside `fh pr`)                              |
-| `publish`                               | Push your `.forkhub` intent repo public so others can import                                            |
-| `import <url>`                          | Import a patch intent from another user's `.forkhub`                                                    |
-| `search`                                | Find published patches by author or target repo                                                         |
-| `re-derive <patch-id>`                  | Generate context bundle for AI re-derivation                                                            |
-| `apply <bundle-path>`                   | Apply realization from bundle (with verify gate)                                                        |
-| `drift-check`                           | Detect which patches drifted from upstream                                                              |
-| `watch [--once] [--interval <sec>]`     | Daemon: auto-detect drift + regenerate + apply                                                          |
-| `update [--tag]`                        | Consumer: advance to latest tag                                                                         |
-| `rollback`                              | Consumer: roll back to previous tag                                                                     |
-| `status`                                | Inspect current state                                                                                   |
-| `--version` / `--help`                  | Version / help                                                                                          |
+| Command                                                     | Purpose                                                                                                 |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `init`                                                      | Set up `.forkhub` repo + config                                                                         |
+| `draft "<intent>"`                                          | Create a `*` branch + draft INTENT.md                                                                   |
+| `satisfied`                                                 | Finalize intent, capture diff, port to `forkhub/main`, tag                                              |
+| `pr [--draft] [--base <branch>]`                            | Push branch to your fork + open PR upstream (defaults `--base` to the detected upstream default branch) |
+| `link-pr <patch-id\|branch> <pr#\|url>`                     | Link an existing upstream PR to a patch (if you opened it outside `fh pr`)                              |
+| `publish`                                                   | Push your `.forkhub` intent repo public so others can import                                            |
+| `import <url>`                                              | Import a patch intent from another user's `.forkhub`                                                    |
+| `reuse <url> [--agent <name>]`                              | Import + build re-derivation bundle in one step                                                         |
+| `search [--target <repo>] [--author <user>] [--sort stars]` | Find published patches (★ = publisher repo stars)                                                       |
+| `popular [--target <repo>]`                                 | Most-starred patches first (merge-priority signal)                                                      |
+| `re-derive <patch-id>`                                      | Generate context bundle for AI re-derivation                                                            |
+| `apply <bundle-path>`                                       | Apply realization from bundle (with verify gate)                                                        |
+| `drift-check`                                               | Detect which patches drifted from upstream                                                              |
+| `watch [--once] [--interval <sec>]`                         | Daemon: auto-detect drift + regenerate + apply                                                          |
+| `update [--tag]`                                            | Consumer: advance to latest tag                                                                         |
+| `rollback`                                                  | Consumer: roll back to previous tag                                                                     |
+| `status`                                                    | Inspect current state                                                                                   |
+| `--version` / `--help`                                      | Version / help                                                                                          |
 
 ## How it works
 
@@ -159,10 +161,16 @@ Publish your intents by making your `.forkhub` public (`fh publish`). Import som
 ```bash
 fh search --target github.com/owner/repo    # find patches for a repo
 fh search --author alice                    # browse one user's published patches
-fh import https://github.com/ALICE/.forkhub/blob/main/repos/github.com/owner/repo/patches/<patch-id>/INTENT.md
+fh popular --target github.com/owner/repo   # most-starred first (what to merge upstream)
+fh reuse https://github.com/ALICE/.forkhub/blob/main/repos/github.com/owner/repo/patches/<patch-id>/INTENT.md
+#   ^ import + re-derivation bundle in one step. Then have your AI agent
+#     implement it (/forkhub skill), and run:
+fh apply <bundle-path>                      # verify gate + tag
+fh update                                   # move your checkout to the new release
 ```
 
 Imported patches keep author attribution. Re-derivation adapts them to your fork's state.
+Search results show ★ stars (publisher-repo stars) as the popularity signal.
 
 ## FAQ
 
