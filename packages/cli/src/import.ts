@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { join } from "node:path";
 import { isGitRepo } from "./git";
 import { generateULID8 } from "./patch-id";
 
@@ -49,13 +49,9 @@ function parseFrontmatter(content: string): { data: IntentFrontmatter; body: str
   return { data, body };
 }
 
-function blobUrlToRaw(url: string): string {
-  return url
-    .replace("github.com", "raw.githubusercontent.com")
-    .replace("/blob/", "/");
-}
-
-function parseImportSource(source: string): { user: string; repo: string; branch: string; path: string } | null {
+function parseImportSource(
+  source: string,
+): { user: string; repo: string; branch: string; path: string } | null {
   let match = source.match(/github\.com\/([^/]+)\/([^/]+)\/blob\/([^/]+)\/(.+)$/);
   if (match?.[1] && match[2] && match[3] && match[4]) {
     return { user: match[1], repo: match[2], branch: match[3], path: match[4] };
@@ -77,7 +73,12 @@ async function fetchPatchFiles(
   user: string,
   branch: string,
   patchPath: string,
-): Promise<{ intent: string; acceptance: string | null; reference: string | null; attempts: string | null }> {
+): Promise<{
+  intent: string;
+  acceptance: string | null;
+  reference: string | null;
+  attempts: string | null;
+}> {
   const baseUrl = `https://raw.githubusercontent.com/${user}/.forkhub/${branch}/${patchPath}`;
 
   const intent = await fetchRawFile(`${baseUrl}/INTENT.md`);
@@ -92,7 +93,10 @@ async function fetchPatchFiles(
   return { intent, acceptance, reference, attempts };
 }
 
-export async function runImport(source: string, options: ImportOptions = {}): Promise<ImportResult> {
+export async function runImport(
+  source: string,
+  options: ImportOptions = {},
+): Promise<ImportResult> {
   if (!(await isGitRepo())) {
     throw new Error("Not a git repository. Run from inside your fork's checkout.");
   }
@@ -110,20 +114,24 @@ export async function runImport(source: string, options: ImportOptions = {}): Pr
   } else if (parsed && parsed.user) {
     throw new Error(
       `Shorthand @user/patch-id requires knowing the target repo.\n` +
-      `Use the full URL:\n` +
-      `  forkhub import https://github.com/${parsed.user}/.forkhub/blob/main/repos/<host>/<owner>/<repo>/patches/<patch-id>/INTENT.md`,
+        `Use the full URL:\n` +
+        `  forkhub import https://github.com/${parsed.user}/.forkhub/blob/main/repos/<host>/<owner>/<repo>/patches/<patch-id>/INTENT.md`,
     );
   } else {
     throw new Error(
       `Could not parse import source: ${source}\n` +
-      `Use a GitHub URL to INTENT.md or a patch directory.`,
+        `Use a GitHub URL to INTENT.md or a patch directory.`,
     );
   }
 
   const branch = parsed?.branch ?? "main";
   const user = parsed?.user ?? "";
 
-  const { intent, acceptance, reference, attempts } = await fetchPatchFiles(user, branch, patchPath);
+  const { intent, acceptance, reference, attempts } = await fetchPatchFiles(
+    user,
+    branch,
+    patchPath,
+  );
   const { data: frontmatter } = parseFrontmatter(intent);
 
   const patchId = frontmatter.id ?? `imported-${generateULID8()}`;
@@ -157,22 +165,19 @@ export async function runImport(source: string, options: ImportOptions = {}): Pr
 
   const patchDir = join(repoDir, "patches", patchId);
   if (existsSync(patchDir) && !options.force) {
-    throw new Error(
-      `Patch ${patchId} already exists. Use --force to overwrite.`,
-    );
+    throw new Error(`Patch ${patchId} already exists. Use --force to overwrite.`);
   }
 
   mkdirSync(patchDir, { recursive: true });
 
   const filesImported: string[] = [];
 
-  const intentContent = intent.replace(
-    /^(source_url:) null$/m,
-    `source_url: https://github.com/${user}/.forkhub/blob/${branch}/${patchPath}/INTENT.md`,
-  ).replace(
-    /^(imported_at:) null$/m,
-    `imported_at: ${new Date().toISOString()}`,
-  );
+  const intentContent = intent
+    .replace(
+      /^(source_url:) null$/m,
+      `source_url: https://github.com/${user}/.forkhub/blob/${branch}/${patchPath}/INTENT.md`,
+    )
+    .replace(/^(imported_at:) null$/m, `imported_at: ${new Date().toISOString()}`);
 
   await Bun.write(join(patchDir, "INTENT.md"), intentContent);
   filesImported.push("INTENT.md");

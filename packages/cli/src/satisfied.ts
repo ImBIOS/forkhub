@@ -5,15 +5,13 @@ import {
   gitOrThrow,
   gitExec,
   currentBranch,
-  currentSha,
   diff,
   diffNameOnly,
   shortSha,
   checkout,
   cherryPick,
 } from "./git";
-import { slugify, generateULID8 } from "./patch-id";
-import type { InitOptions } from "./init";
+import { generateULID8 } from "./patch-id";
 
 export type SatisfiedOptions = {
   forkhubDir?: string;
@@ -100,7 +98,7 @@ export async function runSatisfied(options: SatisfiedOptions = {}): Promise<Sati
 
   const draftPath = join(process.cwd(), DRAFT_FILE);
   if (!existsSync(draftPath)) {
-    throw new Error("No draft file found. Run `forkhub draft \"<intent>\"` first.");
+    throw new Error('No draft file found. Run `forkhub draft "<intent>"` first.');
   }
 
   const branch = await currentBranch();
@@ -122,9 +120,25 @@ export async function runSatisfied(options: SatisfiedOptions = {}): Promise<Sati
   const { mkdirSync } = await import("node:fs");
   mkdirSync(patchDir, { recursive: true });
 
-  const upstreamSha = await gitOrThrow(["rev-parse", "origin/main"]).catch(() =>
-    gitOrThrow(["rev-parse", "main"]),
-  );
+  const manifestPath = join(repoDir, "manifest.json");
+  const manifest = JSON.parse(await Bun.file(manifestPath).text());
+  const upstreamRemote =
+    typeof manifest.upstream_remote === "string" ? manifest.upstream_remote : "upstream";
+  const upstreamBranch =
+    typeof manifest.upstream_main_branch === "string" ? manifest.upstream_main_branch : "main";
+  const upstreamCandidates = [
+    `${upstreamRemote}/${upstreamBranch}`,
+    `origin/${upstreamBranch}`,
+    upstreamBranch,
+  ];
+  let upstreamSha: string | null = null;
+  for (const ref of upstreamCandidates) {
+    try {
+      upstreamSha = await gitOrThrow(["rev-parse", ref]);
+      break;
+    } catch {}
+  }
+  upstreamSha ??= await gitOrThrow(["rev-parse", "HEAD"]);
   const filesChanged = await diffNameOnly(upstreamSha, "HEAD");
   const realizationDiff = await diff(
     upstreamSha,
@@ -216,13 +230,8 @@ bun test
   );
 
   const { generateVerifySh } = await import("./verify");
-  await Bun.write(
-    join(patchDir, "verify.sh"),
-    generateVerifySh("bun test", patchId),
-  );
+  await Bun.write(join(patchDir, "verify.sh"), generateVerifySh("bun test", patchId));
 
-  const manifestPath = join(repoDir, "manifest.json");
-  const manifest = JSON.parse(await Bun.file(manifestPath).text());
   manifest.patches[patchId] = {
     status: "applied",
     version: 1,
@@ -231,7 +240,7 @@ bun test
     branch,
     last_realized_against_commit: shortSha(upstreamSha),
   };
-  manifest.apply_order.push(patchId);
+  if (!manifest.apply_order.includes(patchId)) manifest.apply_order.push(patchId);
   await Bun.write(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
 
   let forkhubMainUpdated = false;
@@ -256,7 +265,9 @@ bun test
       await gitOrThrow(["tag", tag]);
     } catch (err) {
       await gitExec(["cherry-pick", "--abort"]);
-      throw new Error(`Cherry-pick failed (sibling conflict?). Patch saved to .forkhub but NOT ported to forkhub/main. Use --skip-port to save without porting. Error: ${err instanceof Error ? err.message : err}`);
+      throw new Error(
+        `Cherry-pick failed (sibling conflict?). Patch saved to .forkhub but NOT ported to forkhub/main. Use --skip-port to save without porting. Error: ${err instanceof Error ? err.message : err}`,
+      );
     }
 
     await checkout(branch);

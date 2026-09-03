@@ -6,6 +6,7 @@ import {
   getRemoteUrl,
   listRemotes,
   isGitRepo,
+  detectDefaultBranch,
 } from "./git";
 
 export type InitOptions = {
@@ -119,6 +120,11 @@ export async function runInit(options: InitOptions = {}): Promise<InitResult> {
   }
 
   const upstreamJsonPath = join(repoDir, "upstream.json");
+  const defaultBranch = await detectDefaultBranch(
+    [trackingRemote, ...(isFork && forkRemote ? [forkRemote] : [])].filter(
+      (r): r is string => typeof r === "string",
+    ),
+  ).catch(() => "main");
   if (!existsSync(upstreamJsonPath)) {
     const trackingSha = await gitExec(["rev-parse", "HEAD"]).then((r) => r.stdout.slice(0, 7));
     await Bun.write(
@@ -126,7 +132,7 @@ export async function runInit(options: InitOptions = {}): Promise<InitResult> {
       JSON.stringify(
         {
           upstream_url: trackingUrl,
-          upstream_main_branch: "main",
+          upstream_main_branch: defaultBranch,
           upstream_remote: trackingRemote,
           fork_url: isFork ? await getRemoteUrl(forkRemote!) : null,
           fork_remote: isFork ? forkRemote : null,
@@ -147,7 +153,7 @@ export async function runInit(options: InitOptions = {}): Promise<InitResult> {
       JSON.stringify(
         {
           target_repo: targetRepo,
-          upstream_main_branch: "main",
+          upstream_main_branch: defaultBranch,
           upstream_remote: trackingRemote,
           fork_remote: isFork ? forkRemote : null,
           is_fork: isFork,

@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { isGitRepo, gitExec } from "./git";
-import { runDriftCheck, formatDriftCheckResult, type DriftCheckResult } from "./drift-check";
+import { isGitRepo } from "./git";
+import { runDriftCheck, formatDriftCheckResult } from "./drift-check";
 
 export type WatchOptions = {
   forkhubDir?: string;
@@ -45,7 +45,10 @@ async function checkBundleComplete(bundlePath: string): Promise<boolean> {
   return existsSync(join(bundlePath, "REALIZATION", "realization.diff"));
 }
 
-async function applyBundle(bundlePath: string, forkhubDir: string): Promise<{ success: boolean; tag: string | null; errors: string[] }> {
+async function applyBundle(
+  bundlePath: string,
+  forkhubDir: string,
+): Promise<{ success: boolean; tag: string | null; errors: string[] }> {
   const { runApply } = await import("./apply");
   try {
     const result = await runApply(bundlePath, { forkhubDir, skipTests: false });
@@ -65,15 +68,15 @@ const AGENTS: Record<string, AgentCommand> = {
   opencode: {
     command: "opencode",
     argsForBundle: (bundlePath, promptPath) => [
-      "--prompt", promptPath,
-      "--output", `${bundlePath}/REALIZATION/`,
+      "--prompt",
+      promptPath,
+      "--output",
+      `${bundlePath}/REALIZATION/`,
     ],
   },
   "claude-code": {
     command: "claude",
-    argsForBundle: (bundlePath, promptPath) => [
-      "--file", promptPath,
-    ],
+    argsForBundle: (bundlePath, promptPath) => ["--file", promptPath],
   },
 };
 
@@ -94,7 +97,7 @@ async function invokeAgent(agentName: string, bundlePath: string, patchId: strin
       stdout: "pipe",
       stderr: "pipe",
     });
-    const [stdout, stderr] = await Promise.all([
+    const [, stderr] = await Promise.all([
       new Response(proc.stdout).text(),
       new Response(proc.stderr).text(),
     ]);

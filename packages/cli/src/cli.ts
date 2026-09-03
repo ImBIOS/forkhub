@@ -12,6 +12,17 @@ import { runWatch } from "./watch";
 import { runSearch, formatSearchResults } from "./search";
 import { runPr } from "./pr";
 import { runPublish } from "./publish";
+import { runLinkPr } from "./link-pr";
+
+async function printVersion(): Promise<void> {
+  try {
+    const pkgPath = new URL("../package.json", import.meta.url);
+    const pkg = JSON.parse(await Bun.file(pkgPath).text());
+    console.log(`forkhub v${pkg.version ?? "unknown"}`);
+  } catch {
+    console.log("forkhub (version unknown)");
+  }
+}
 
 const HELP = `fh (forkhub) — keep up-to-date upstream + your custom patches
 
@@ -20,6 +31,7 @@ Usage:
   fh draft "<intent>"                    Create a draft branch for a new patch
   fh satisfied [--skip-port]             Finalize intent, port to forkhub/main
   fh pr [--draft] [--base <branch>]      Push current branch + open PR to upstream
+  fh link-pr <patch-id|branch> <pr#|url> Link an existing upstream PR to a patch
   fh publish [--message <msg>] [--allow-missing-pr]  Push .forkhub repo (requires open issue+PR by default)
   fh import <url> [--force]              Import a patch from another user's .forkhub
   fh search [query] [--target <repo>]    Search GitHub for patches
@@ -31,6 +43,7 @@ Usage:
   fh update [--tag <tag>] [--dry-run]    Update to latest (or specified) tag
   fh rollback                            Roll back to the previous tag
   fh status                              Show current state
+  fh --version                           Show version
   fh --help                              Show this help
 
 Producer commands run from inside your fork's checkout.
@@ -38,13 +51,20 @@ Consumer commands (update, rollback, status) also run from the fork checkout.
 The \`pr\` command requires a fork setup (separate \`upstream\` and \`origin\` remotes).
 `;
 
-function parseArgs(argv: string[]): { command?: string; opts: Record<string, string | boolean>; positional: string[] } {
+function parseArgs(argv: string[]): {
+  command?: string;
+  opts: Record<string, string | boolean>;
+  positional: string[];
+} {
   const [command, ...rest] = argv;
   const opts: Record<string, string | boolean> = {};
   const positional: string[] = [];
   for (let i = 0; i < rest.length; i++) {
     const arg = rest[i];
-    if (arg && (arg.startsWith("--") || (arg.startsWith("-") && arg.length > 1 && !/^-?\d/.test(arg)))) {
+    if (
+      arg &&
+      (arg.startsWith("--") || (arg.startsWith("-") && arg.length > 1 && !/^-?\d/.test(arg)))
+    ) {
       const key = arg.slice(arg.startsWith("--") ? 2 : 1);
       const next = rest[i + 1];
       if (next && !next.startsWith("-")) {
@@ -87,8 +107,13 @@ async function runStatus() {
 async function main() {
   const { command, opts, positional } = parseArgs(process.argv.slice(2));
 
-  if (!command || command === "--help" || command === "-h") {
+  if (!command || command === "--help" || command === "-h" || command === "help") {
     console.log(HELP);
+    return;
+  }
+
+  if (command === "--version" || command === "-v" || command === "version") {
+    await printVersion();
     return;
   }
 
@@ -96,7 +121,8 @@ async function main() {
     switch (command) {
       case "init": {
         const initOpts: { upstreamRemote?: string; forkRemote?: string; target?: string } = {};
-        if (typeof opts["upstream-remote"] === "string") initOpts.upstreamRemote = opts["upstream-remote"];
+        if (typeof opts["upstream-remote"] === "string")
+          initOpts.upstreamRemote = opts["upstream-remote"];
         if (typeof opts["fork-remote"] === "string") initOpts.forkRemote = opts["fork-remote"];
         if (typeof opts.target === "string") initOpts.target = opts.target;
 
@@ -105,19 +131,23 @@ async function main() {
         console.log(`Upstream remote: ${result.upstreamRemote} (${result.upstreamUrl})`);
         if (result.isFork && result.forkRemote) {
           console.log(`Fork remote:     ${result.forkRemote} (${result.forkUrl})`);
-          console.log(`Setup:           FORK — track drift on upstream, push PRs from ${result.forkRemote}`);
+          console.log(
+            `Setup:           FORK — track drift on upstream, push PRs from ${result.forkRemote}`,
+          );
         } else {
           console.log(`Setup:           SINGLE-REMOTE — no fork detected`);
         }
         console.log(`.forkhub:    ${result.forkhubDir}`);
-        console.log(result.created ? "Created new .forkhub repo." : "Existing .forkhub repo configured.");
+        console.log(
+          result.created ? "Created new .forkhub repo." : "Existing .forkhub repo configured.",
+        );
         break;
       }
 
       case "draft": {
         const intent = positional.join(" ");
         if (!intent) {
-          throw new Error("Intent description required. Usage: fh draft \"<intent>\"");
+          throw new Error('Intent description required. Usage: fh draft "<intent>"');
         }
         const result = await runDraft(intent);
         console.log(`Branch:    ${result.branch}`);
@@ -161,16 +191,22 @@ async function main() {
         }
 
         if (opts["dry-run"]) {
-          console.log(`[dry-run] Would update ${result.from.slice(0, 7)} → ${result.to} (${result.toSha.slice(0, 7)})`);
+          console.log(
+            `[dry-run] Would update ${result.from.slice(0, 7)} → ${result.to} (${result.toSha.slice(0, 7)})`,
+          );
           return;
         }
 
-        console.log(`Updated ${result.from.slice(0, 7)} → ${result.to} (${result.toSha.slice(0, 7)})`);
+        console.log(
+          `Updated ${result.from.slice(0, 7)} → ${result.to} (${result.toSha.slice(0, 7)})`,
+        );
         if (result.stashed) {
           if (result.stashRestored) {
             console.log(`Local changes restored from stash.`);
           } else {
-            console.warn(`Local changes could not be restored (conflicts). See \`git stash list\`.`);
+            console.warn(
+              `Local changes could not be restored (conflicts). See \`git stash list\`.`,
+            );
           }
         }
         break;
@@ -206,7 +242,8 @@ async function main() {
       }
 
       case "search": {
-        const searchOpts: { targetRepo?: string; author?: string; query?: string; limit?: number } = {};
+        const searchOpts: { targetRepo?: string; author?: string; query?: string; limit?: number } =
+          {};
         if (typeof opts.target === "string") searchOpts.targetRepo = opts.target;
         if (typeof opts.author === "string") searchOpts.author = opts.author;
         if (typeof opts.limit === "string") searchOpts.limit = parseInt(opts.limit, 10);
@@ -265,7 +302,9 @@ async function main() {
           console.log(`  - ${f}`);
         }
         console.log(`\nNext steps:`);
-        console.log(`  1. Have an AI agent re-derive the patch and save to REALIZATION/realization.diff`);
+        console.log(
+          `  1. Have an AI agent re-derive the patch and save to REALIZATION/realization.diff`,
+        );
         console.log(`  2. Run: fh apply ${result.bundlePath}`);
         break;
       }
@@ -293,7 +332,13 @@ async function main() {
       }
 
       case "pr": {
-        const prOpts: { draft?: boolean; base?: string; title?: string; body?: string; noPush?: boolean } = {};
+        const prOpts: {
+          draft?: boolean;
+          base?: string;
+          title?: string;
+          body?: string;
+          noPush?: boolean;
+        } = {};
         if (opts.draft === true) prOpts.draft = true;
         if (typeof opts.base === "string") prOpts.base = opts.base;
         if (typeof opts.title === "string") prOpts.title = opts.title;
@@ -311,8 +356,24 @@ async function main() {
           console.error(`gh pr create failed: ${result.error}`);
           console.error(`\nYou can still push the branch manually:`);
           console.error(`  git push -u <fork-remote> ${result.branch}`);
-          console.error(`Then open the PR at: https://github.com/<owner>/<repo>/compare/${result.branch}`);
+          console.error(
+            `Then open the PR at: https://github.com/<owner>/<repo>/compare/${result.branch}`,
+          );
         }
+        break;
+      }
+
+      case "link-pr": {
+        const patchRef = positional[0];
+        const prRef = positional[1];
+        if (!patchRef || !prRef) {
+          throw new Error("Usage: fh link-pr <patch-id|branch> <pr-number|pr-url>");
+        }
+        const result = await runLinkPr(patchRef, prRef);
+        console.log(`Patch:     ${result.patchId} (${result.branch})`);
+        console.log(`PR:        ${result.prUrl}`);
+        console.log(`PR #:      ${result.prNumber} (${result.prState})`);
+        console.log(`\nLinked. \`fh publish\` will now recognize this patch.`);
         break;
       }
 

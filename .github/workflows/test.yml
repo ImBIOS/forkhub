@@ -20,10 +20,16 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: "24"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Typecheck CLI
         run: pnpm exec tsc --noEmit
+        working-directory: packages/cli
+      - name: Unit + integration tests
+        run: bun test
         working-directory: packages/cli
 
   docker-orchestrator:

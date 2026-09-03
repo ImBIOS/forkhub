@@ -1,13 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
-import { join, dirname } from "node:path";
-import {
-  isGitRepo,
-  gitOrThrow,
-  gitExec,
-  currentSha,
-  shortSha,
-  checkout,
-} from "./git";
+import { join } from "node:path";
+import { isGitRepo, gitOrThrow, gitExec, currentSha, shortSha, checkout } from "./git";
 
 export type ApplyOptions = {
   forkhubDir?: string;
@@ -23,11 +16,6 @@ export type ApplyResult = {
   tag: string | null;
   errors: string[];
 };
-
-function dirnameOf(path: string): string {
-  const idx = path.lastIndexOf("/");
-  return idx === -1 ? "." : path.slice(0, idx);
-}
 
 function readFrontmatterField(content: string, field: string): string | null {
   const match = content.match(new RegExp(`^${field}:\\s*(.+)$`, "m"));
@@ -51,7 +39,10 @@ async function runVerificationCommand(command: string, cwd: string): Promise<boo
   return exitCode === 0;
 }
 
-export async function runApply(bundlePath: string, options: ApplyOptions = {}): Promise<ApplyResult> {
+export async function runApply(
+  bundlePath: string,
+  options: ApplyOptions = {},
+): Promise<ApplyResult> {
   if (!(await isGitRepo())) {
     throw new Error("Not a git repository. Run from inside your fork's checkout.");
   }
@@ -60,7 +51,7 @@ export async function runApply(bundlePath: string, options: ApplyOptions = {}): 
   if (!existsSync(realizationDiffPath)) {
     throw new Error(
       `No realization found at ${realizationDiffPath}.\n` +
-      `The AI should write its diff to REALIZATION/realization.diff in the bundle.`,
+        `The AI should write its diff to REALIZATION/realization.diff in the bundle.`,
     );
   }
 
@@ -152,7 +143,9 @@ export async function runApply(bundlePath: string, options: ApplyOptions = {}): 
       const upstreamTagResult = await gitExec(["describe", "--tags", "--abbrev=0", "forkhub/main"]);
       const upstreamTag = upstreamTagResult.exitCode === 0 ? upstreamTagResult.stdout : "v0.0.0";
       const fhTagsResult = await gitExec(["tag", "--list", `${upstreamTag}-fh*`]);
-      const fhCount = fhTagsResult.stdout ? fhTagsResult.stdout.split("\n").filter(Boolean).length : 0;
+      const fhCount = fhTagsResult.stdout
+        ? fhTagsResult.stdout.split("\n").filter(Boolean).length
+        : 0;
       tag = `${upstreamTag}-fh${fhCount + 1}`;
       await gitOrThrow(["tag", tag]);
     }
@@ -198,7 +191,7 @@ export async function runApply(bundlePath: string, options: ApplyOptions = {}): 
       if (existsSync(attemptsPath)) {
         const attempts = readFileSync(attemptsPath, "utf-8");
         const newEntry = JSON.stringify({
-          n: (attempts.split("\n").filter(Boolean).length) + 1,
+          n: attempts.split("\n").filter(Boolean).length + 1,
           phase: "re-deriving",
           timestamp: new Date().toISOString(),
           upstream_sha: newSha,
@@ -208,7 +201,10 @@ export async function runApply(bundlePath: string, options: ApplyOptions = {}): 
           model: "human-orchestrated",
           bundle: bundlePath,
         });
-        await Bun.write(attemptsPath, attempts + (attempts.endsWith("\n") ? "" : "\n") + newEntry + "\n");
+        await Bun.write(
+          attemptsPath,
+          attempts + (attempts.endsWith("\n") ? "" : "\n") + newEntry + "\n",
+        );
       }
     }
   }

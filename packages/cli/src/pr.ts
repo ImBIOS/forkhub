@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { isGitRepo, gitExec, gitOrThrow, currentBranch, getRemoteUrl, listRemotes } from "./git";
+import { isGitRepo, gitExec, currentBranch, getRemoteUrl, listRemotes } from "./git";
 
 export type PrOptions = {
   forkhubDir?: string;
@@ -63,7 +63,9 @@ async function loadManifest(forkhubDir: string, targetRepo: string): Promise<any
   return JSON.parse(readFileSync(manifestPath, "utf8"));
 }
 
-async function runGh(args: string[]): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+export async function runGh(
+  args: string[],
+): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   const proc = Bun.spawn(["gh", ...args], {
     stdout: "pipe",
     stderr: "pipe",
@@ -110,7 +112,6 @@ export async function runPr(options: PrOptions = {}): Promise<PrResult> {
   }
 
   const forkRemote = manifest.fork_remote as string;
-  const upstreamRemote = (manifest.upstream_remote as string) ?? "upstream";
 
   if (!options.noPush) {
     const pushResult = await gitExec(["push", "-u", forkRemote, branch]);
@@ -137,10 +138,15 @@ export async function runPr(options: PrOptions = {}): Promise<PrResult> {
         const sections: string[] = [];
         const intentMatch = intentContent.match(/## Intent\s*\n([\s\S]*?)(?=\n## |\n---|\s*$)/);
         if (intentMatch && intentMatch[1]) sections.push(`## Intent\n\n${intentMatch[1].trim()}`);
-        const nonNegMatch = intentContent.match(/## Non-negotiables\s*\n([\s\S]*?)(?=\n## |\n---|\s*$)/);
-        if (nonNegMatch && nonNegMatch[1]) sections.push(`## Non-negotiables\n\n${nonNegMatch[1].trim()}`);
+        const nonNegMatch = intentContent.match(
+          /## Non-negotiables\s*\n([\s\S]*?)(?=\n## |\n---|\s*$)/,
+        );
+        if (nonNegMatch && nonNegMatch[1])
+          sections.push(`## Non-negotiables\n\n${nonNegMatch[1].trim()}`);
         if (sections.length > 0) {
-          prBody = sections.join("\n\n") + "\n\n---\n\nManaged via [forkhub](https://github.com/ImBIOS/forkhub).";
+          prBody =
+            sections.join("\n\n") +
+            "\n\n---\n\nManaged via [forkhub](https://github.com/ImBIOS/forkhub).";
         }
       }
     }
@@ -148,26 +154,27 @@ export async function runPr(options: PrOptions = {}): Promise<PrResult> {
   if (!prTitle) prTitle = branch;
   if (!prBody) prBody = "Managed via [forkhub](https://github.com/ImBIOS/forkhub).";
 
-  const base = options.base ?? "main";
+  const base =
+    options.base ??
+    (typeof manifest.upstream_main_branch === "string" ? manifest.upstream_main_branch : "main");
   const draftFlag = options.draft ? "--draft" : "";
   const args = [
-    "pr", "create",
-    "--base", base,
-    "--head", branch,
-    "--repo", targetRepo,
-    "--title", prTitle,
-    "--body", prBody,
+    "pr",
+    "create",
+    "--base",
+    base,
+    "--head",
+    branch,
+    "--repo",
+    targetRepo,
+    "--title",
+    prTitle,
+    "--body",
+    prBody,
   ];
   if (draftFlag) args.push(draftFlag);
 
   const ghResult = await runGh(args);
-  if (ghResult.exitCode === 127 || (ghResult.stderr && ghResult.stderr.includes("not found"))) {
-    const fallback = await gitExec(args);
-    if (fallback.exitCode !== 127) {
-      Object.assign(ghResult, { stdout: fallback.stdout, stderr: fallback.stderr, exitCode: fallback.exitCode });
-    }
-  }
-
 
   let prUrl: string | null = null;
   let prNumber: number | null = null;
@@ -182,7 +189,17 @@ export async function runPr(options: PrOptions = {}): Promise<PrResult> {
   } else {
     error = ghResult.stderr || ghResult.stdout;
     if (error.includes("already exists") || error.includes("A pull request already exists")) {
-      const existingResult = await gitExec(["pr", "view", branch, "--json", "url,number", "--jq", ".url,.number"]);
+      const existingResult = await runGh([
+        "pr",
+        "view",
+        branch,
+        "--repo",
+        targetRepo,
+        "--json",
+        "url,number",
+        "--jq",
+        ".url,.number",
+      ]);
       if (existingResult.exitCode === 0) {
         const lines = existingResult.stdout.trim().split("\n");
         if (lines[0]) prUrl = lines[0];
