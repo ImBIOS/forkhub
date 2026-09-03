@@ -80,7 +80,11 @@ const AGENTS: Record<string, AgentCommand> = {
   },
 };
 
-async function invokeAgent(agentName: string, bundlePath: string, patchId: string): Promise<void> {
+export async function invokeAgent(
+  agentName: string,
+  bundlePath: string,
+  patchId: string,
+): Promise<void> {
   const agent = AGENTS[agentName];
   if (!agent) {
     console.error(`\n✗ Unknown agent: ${agentName}. Available: ${Object.keys(AGENTS).join(", ")}`);

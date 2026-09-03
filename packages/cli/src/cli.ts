@@ -13,6 +13,7 @@ import { runSearch, formatSearchResults } from "./search";
 import { runPr } from "./pr";
 import { runPublish } from "./publish";
 import { runLinkPr } from "./link-pr";
+import { runReuse } from "./reuse";
 
 async function printVersion(): Promise<void> {
   try {
@@ -34,7 +35,11 @@ Usage:
   fh link-pr <patch-id|branch> <pr#|url> Link an existing upstream PR to a patch
   fh publish [--message <msg>] [--allow-missing-pr]  Push .forkhub repo (requires open issue+PR by default)
   fh import <url> [--force]              Import a patch from another user's .forkhub
-  fh search [query] [--target <repo>]    Search GitHub for patches
+  fh reuse <url> [--agent <name>]         Import + build re-derivation bundle in one step
+  fh search [query] [--target <repo>] [--author <user>] [--sort stars]
+                                         Search GitHub for patches (★ = publisher repo stars)
+  fh popular [--target <repo>] [--author <user>]
+                                         Most-starred patches first
   fh re-derive <patch-id> [--force]      Generate re-derivation context bundle
   fh apply <bundle-path>                 Apply realization from context bundle
    fh drift-check [--json]                 Check if patches need re-derivation
@@ -242,15 +247,60 @@ async function main() {
       }
 
       case "search": {
-        const searchOpts: { targetRepo?: string; author?: string; query?: string; limit?: number } =
-          {};
+        const searchOpts: {
+          targetRepo?: string;
+          author?: string;
+          query?: string;
+          limit?: number;
+          sort?: "stars";
+        } = {};
         if (typeof opts.target === "string") searchOpts.targetRepo = opts.target;
         if (typeof opts.author === "string") searchOpts.author = opts.author;
         if (typeof opts.limit === "string") searchOpts.limit = parseInt(opts.limit, 10);
+        if (opts.sort === "stars") searchOpts.sort = "stars";
         if (positional.length > 0) searchOpts.query = positional.join(" ");
 
         const results = await runSearch(searchOpts);
         console.log(formatSearchResults(results));
+        break;
+      }
+
+      case "popular": {
+        const popularOpts: {
+          targetRepo?: string;
+          author?: string;
+          query?: string;
+          limit?: number;
+          sort?: "stars";
+        } = { sort: "stars", limit: 10 };
+        if (typeof opts.target === "string") popularOpts.targetRepo = opts.target;
+        if (typeof opts.author === "string") popularOpts.author = opts.author;
+        if (typeof opts.limit === "string") popularOpts.limit = parseInt(opts.limit, 10);
+        if (positional.length > 0) popularOpts.query = positional.join(" ");
+
+        const results = await runSearch(popularOpts);
+        console.log(formatSearchResults(results));
+        break;
+      }
+
+      case "reuse": {
+        const source = positional[0];
+        if (!source) {
+          throw new Error("Source URL required. Usage: fh reuse <github-url-to-INTENT.md>");
+        }
+        const reuseOpts: { force?: boolean; agent?: string } = {};
+        if (opts.force === true) reuseOpts.force = true;
+        if (typeof opts.agent === "string") reuseOpts.agent = opts.agent;
+
+        const result = await runReuse(source, reuseOpts);
+        console.log(`Patch ID:    ${result.patchId} (by ${result.author})`);
+        console.log(`Target repo: ${result.targetRepo}`);
+        console.log(`Bundle:      ${result.bundlePath}`);
+        console.log(`\nNext steps:`);
+        console.log(`  1. Have an AI agent implement the patch from the bundle`);
+        console.log(`     (run /forkhub in OpenCode, or: fh watch --once --agent opencode)`);
+        console.log(`  2. Run: fh apply ${result.bundlePath}`);
+        console.log(`  3. Run: fh update   (replace your checkout with the new release)`);
         break;
       }
 

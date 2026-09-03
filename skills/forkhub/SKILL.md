@@ -31,6 +31,7 @@ Read the draft file and the current source code. Understand what needs to change
 ### Step 3: Implement
 
 Implement the feature/fix described in the intent. Rules:
+
 - Modify only files necessary for the patch
 - Write clean, minimal code
 - Do NOT modify files the intent says are off-limits
@@ -45,6 +46,7 @@ Edit `.forkhub-draft.md` to fill in the template sections:
 **## Non-negotiables** — What MUST be true? (e.g., "flag is opt-in", "game.ts not modified")
 
 **## Implementation notes** — What did you do? Be specific:
+
 - Which files changed and where
 - What approach was taken and why
 - Any gotchas for future re-derivation
@@ -87,10 +89,49 @@ local repo isn't a fork (single-remote setup).
 ### Step 6b: Not satisfied
 
 If the user wants changes:
+
 - Make the requested changes
 - Update the Implementation notes in `.forkhub-draft.md`
 - Re-test
 - Ask again
+
+## DISCOVERY Flow (find + reuse someone else's patch)
+
+Published patches live in public `.forkhub` repos. Anyone — including you
+acting for the user — can find and reuse them:
+
+### Step 1: Search
+
+```bash
+fh search --target github.com/owner/repo          # patches for a repo
+fh search --author alice                          # one publisher's patches
+fh search --target github.com/owner/repo --sort stars
+fh popular --target github.com/owner/repo         # most-starred first
+```
+
+Results show ★ stars (publisher-repo stars = popularity proxy), author,
+target, and a ready `fh reuse` command per patch. Needs network + GitHub
+API; set `GH_TOKEN` to avoid rate limits.
+
+### Step 2: Reuse in one command
+
+```bash
+fh reuse https://github.com/ALICE/.forkhub/blob/main/repos/.../patches/<patch-id>/INTENT.md
+```
+
+This imports the intent (author attribution kept) and builds the
+re-derivation bundle against the user's fork. `fh reuse <url> --agent opencode`
+also invokes the agent on the bundle.
+
+### Step 3: Realize + promote (your job as the agent)
+
+1. Read the bundle (`INTENT.md`, `ACCEPTANCE.md`, `siblings/`, `fork/`)
+2. Implement and write `REALIZATION/realization.diff` + `REALIZATION/report.md`
+3. Tell the user to run `fh apply <bundle>` (verify gate) then `fh update`
+   to move their checkout to the new release (`fh rollback` reverts)
+
+For maintainers: `fh popular --target github.com/owner/repo` shows which
+community patches are most-starred — a merge-priority signal.
 
 ## RE-DERIVATION Flow (`/forkhub` with no args)
 
@@ -114,6 +155,7 @@ fi
 ### Step 2: Read the bundle
 
 Read all files in the bundle:
+
 1. **README.md** — step-by-step instructions (authoritative)
 2. **INTENT.md** — source of truth (what to implement)
 3. **ACCEPTANCE.md** — verification criteria
@@ -145,6 +187,7 @@ The diff format MUST be valid `git apply` format with proper `--- a/` and
 ### Step 5: Write report
 
 Write `REALIZATION/report.md` with:
+
 - What you changed (files, line numbers, approach)
 - Whether each acceptance criterion passes
 - Self-confidence (high/medium/low) and reasoning
@@ -187,6 +230,7 @@ When re-deriving a patch against new upstream (drift):
 ### Output
 
 Report:
+
 - What files changed and the diff summary
 - Test results
 - Acceptance criteria pass/fail
@@ -209,23 +253,30 @@ Good intent: "add --hint flag that shows narrowed range (guess+1 to max, or min 
 ## CLI Location
 
 The forkhub CLI is at the project root:
+
 ```
 bun run src/cli.ts <command>
 ```
 
 Or if installed globally:
+
 ```
 forkhub <command>
 ```
 
 ## Commands Reference
 
-| Command | Purpose |
-|---|---|
-| `init [--target <repo>]` | Set up .forkhub repo (auto-detects fork vs single-remote) |
-| `draft "<intent>"` | Create draft branch |
-| `satisfied [--skip-port]` | Finalize intent, port, tag |
-| `pr [--draft] [--base <branch>]` | Push current branch to fork + open PR to upstream (fork only) |
-| `status` | Show current tag state |
-| `update [--tag <tag>]` | Consumer: advance to tag |
-| `rollback` | Consumer: roll back |
+| Command                                                     | Purpose                                                       |
+| ----------------------------------------------------------- | ------------------------------------------------------------- |
+| `init [--target <repo>]`                                    | Set up .forkhub repo (auto-detects fork vs single-remote)     |
+| `draft "<intent>"`                                          | Create draft branch                                           |
+| `satisfied [--skip-port]`                                   | Finalize intent, port, tag                                    |
+| `pr [--draft] [--base <branch>]`                            | Push current branch to fork + open PR to upstream (fork only) |
+| `link-pr <patch\|branch> <pr#\|url>`                        | Link an existing upstream PR to a patch                       |
+| `search [--target <repo>] [--author <user>] [--sort stars]` | Find published patches (★ = popularity)                       |
+| `popular [--target <repo>]`                                 | Most-starred patches first                                    |
+| `import <url>`                                              | Import one patch intent                                       |
+| `reuse <url> [--agent <name>]`                              | Import + build re-derivation bundle in one step               |
+| `status`                                                    | Show current tag state                                        |
+| `update [--tag <tag>]`                                      | Consumer: advance to tag                                      |
+| `rollback`                                                  | Consumer: roll back                                           |
