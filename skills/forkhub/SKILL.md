@@ -133,6 +133,35 @@ also invokes the agent on the bundle.
 For maintainers: `fh popular --target github.com/owner/repo` shows which
 community patches are most-starred — a merge-priority signal.
 
+## BUILD & CONSUME Flow (ship your own fork release)
+
+`fh init` scaffolds a hard-coded reusable workflow
+`.github/workflows/forkhub-build.yml` in the `.forkhub` repo (all targets,
+never hand-edit per repo) plus per-target descriptors:
+
+```
+repos/github.com/<owner>/<repo>/build/
+  BUILD.md      # what artifact to build + toolchain (importable, like INTENT.md)
+  build.sh      # repo-native build, CWD = patched upstream checkout, outputs to ../dist/
+  CONSUME.md    # structured install/verify/run docs → rendered into Release notes
+  triggers.md   # USER-EXPLICIT trigger record (push/schedule/manual)
+```
+
+Rules:
+
+- The workflow is generic: clone upstream at latest tag → apply
+  `reference.diff` in `manifest.json:apply_order` → run each `verify.sh`
+  → run `build/build.sh` (fallback: patched-source tarball, works for ANY
+  OSS type: CLI, GUI, AppImage/dmg/exe, Next.js…) → publish a
+  **namespaced** Release `<owner>-<repo>-<upstreamTag>-fhN` with SHA256SUMS.
+- Triggers affect token/compute spend: ALWAYS ask the user which to enable
+  and record it in `triggers.md`. Never assume.
+- Builds are discoverable like patches: `fh search --target <repo>` lists
+  `BUILD.md` entries (`kind: build`); reuse via `fh import <url-to-BUILD.md>`
+  (`fh reuse` stays patch-only).
+- End users consume artifacts (`curl` binary, `npm`, `docker`, or the
+  `CONSUME.md` vectors) or source (`fh update --tag <namespaced-tag>`).
+
 ## RE-DERIVATION Flow (`/forkhub` with no args)
 
 When the user invokes `/forkhub` with no arguments, check for pending
@@ -266,17 +295,17 @@ forkhub <command>
 
 ## Commands Reference
 
-| Command                                                     | Purpose                                                       |
-| ----------------------------------------------------------- | ------------------------------------------------------------- |
-| `init [--target <repo>]`                                    | Set up .forkhub repo (auto-detects fork vs single-remote)     |
-| `draft "<intent>"`                                          | Create draft branch                                           |
-| `satisfied [--skip-port]`                                   | Finalize intent, port, tag                                    |
-| `pr [--draft] [--base <branch>]`                            | Push current branch to fork + open PR to upstream (fork only) |
-| `link-pr <patch\|branch> <pr#\|url>`                        | Link an existing upstream PR to a patch                       |
-| `search [--target <repo>] [--author <user>] [--sort stars]` | Find published patches (★ = popularity)                       |
-| `popular [--target <repo>]`                                 | Most-starred patches first                                    |
-| `import <url>`                                              | Import one patch intent                                       |
-| `reuse <url> [--agent <name>]`                              | Import + build re-derivation bundle in one step               |
-| `status`                                                    | Show current tag state                                        |
-| `update [--tag <tag>]`                                      | Consumer: advance to tag                                      |
-| `rollback`                                                  | Consumer: roll back                                           |
+| Command                                                     | Purpose                                                             |
+| ----------------------------------------------------------- | ------------------------------------------------------------------- |
+| `init [--target <repo>]`                                    | Set up .forkhub repo + reusable build workflow + build/ descriptors |
+| `draft "<intent>"`                                          | Create draft branch                                                 |
+| `satisfied [--skip-port]`                                   | Finalize intent, port, tag                                          |
+| `pr [--draft] [--base <branch>]`                            | Push current branch to fork + open PR to upstream (fork only)       |
+| `link-pr <patch\|branch> <pr#\|url>`                        | Link an existing upstream PR to a patch                             |
+| `search [--target <repo>] [--author <user>] [--sort stars]` | Find published patches (★ = popularity)                             |
+| `popular [--target <repo>]`                                 | Most-starred patches first                                          |
+| `import <url>`                                              | Import one patch (INTENT.md) or build (BUILD.md)                    |
+| `reuse <url> [--agent <name>]`                              | Import + build re-derivation bundle in one step (patch-only)        |
+| `status`                                                    | Show current tag state                                              |
+| `update [--tag <tag>]`                                      | Consumer: advance to tag                                            |
+| `rollback`                                                  | Consumer: roll back                                                 |

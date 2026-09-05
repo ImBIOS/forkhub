@@ -14,6 +14,7 @@ export type ImportResult = {
   author: string;
   filesImported: string[];
   rederivationNeeded: boolean;
+  kind: "patch" | "build";
 };
 
 type IntentFrontmatter = {
@@ -93,6 +94,35 @@ async function fetchPatchFiles(
   return { intent, acceptance, reference, attempts };
 }
 
+async function fetchBuildFiles(
+  user: string,
+  branch: string,
+  buildPath: string,
+): Promise<{
+  buildMd: string;
+  consume: string | null;
+  buildSh: string | null;
+  triggers: string | null;
+}> {
+  const baseUrl = `https://raw.githubusercontent.com/${user}/.forkhub/${branch}/${buildPath}`;
+
+  const buildMd = await fetchRawFile(`${baseUrl}/BUILD.md`);
+  if (!buildMd) {
+    throw new Error(`Could not fetch BUILD.md from ${baseUrl}/BUILD.md`);
+  }
+
+  const consume = await fetchRawFile(`${baseUrl}/CONSUME.md`);
+  const buildSh = await fetchRawFile(`${baseUrl}/build.sh`);
+  const triggers = await fetchRawFile(`${baseUrl}/triggers.md`);
+
+  return { buildMd, consume, buildSh, triggers };
+}
+
+function parseBuildTarget(buildMd: string): string | null {
+  const { data } = parseFrontmatter(buildMd);
+  return data.target_repo ?? null;
+}
+
 export async function runImport(
   source: string,
   options: ImportOptions = {},
@@ -107,10 +137,10 @@ export async function runImport(
   }
 
   let parsed = parseImportSource(source);
-  let patchPath: string;
+  let docPath: string;
 
   if (parsed && parsed.path !== "repos") {
-    patchPath = parsed.path.replace(/\/INTENT\.md$/, "");
+    docPath = parsed.path.replace(/\/(INTENT\.md|BUILD\.md)$/, "");
   } else if (parsed && parsed.user) {
     throw new Error(
       `Shorthand @user/patch-id requires knowing the target repo.\n` +
@@ -120,12 +150,19 @@ export async function runImport(
   } else {
     throw new Error(
       `Could not parse import source: ${source}\n` +
-        `Use a GitHub URL to INTENT.md or a patch directory.`,
+        `Use a GitHub URL to INTENT.md (patch) or BUILD.md (build).`,
     );
   }
 
   const branch = parsed?.branch ?? "main";
   const user = parsed?.user ?? "";
+  const isBuild = /(^|\/)build$/.test(docPath);
+
+  if (isBuild) {
+    return await runBuildImport(forkhubDir, user, branch, docPath, options);
+  }
+
+  const patchPath = docPath;
 
   const { intent, acceptance, reference, attempts } = await fetchPatchFiles(
     user,
@@ -217,5 +254,86 @@ export async function runImport(
     author,
     filesImported,
     rederivationNeeded: true,
+    kind: "patch",
+  };
+}
+
+/**
+ * Convention #2 reuse path: import someone's published build descriptors
+ * (BUILD.md + CONSUME.md + build.sh + triggers.md) into this repo's
+ * `build/` dir. No manifest patch entry — builds describe HOW to build,
+ * patches describe WHAT to change.
+ */
+async function runBuildImport(
+  forkhubDir: string,
+  user: string,
+  branch: string,
+  buildPath: string,
+  options: ImportOptions,
+): Promise<ImportResult> {
+  const { buildMd, consume, buildSh, triggers } = await fetchBuildFiles(user, branch, buildPath);
+  const targetRepo = parseBuildTarget(buildMd);
+  if (!targetRepo) {
+    throw new Error("Imported BUILD.md has no target_repo in frontmatter.");
+  }
+
+  const { targetSlug } = await import("./build-template");
+  const buildId = `build:${targetSlug(targetRepo)}`;
+
+  const repoDir = join(forkhubDir, "repos", targetRepo);
+  if (!existsSync(repoDir)) {
+    mkdirSync(repoDir, { recursive: true });
+    await Bun.write(
+      join(repoDir, "manifest.json"),
+      JSON.stringify(
+        {
+          target_repo: targetRepo,
+          upstream_main_branch: "main",
+          upstream_remote: "upstream",
+          schedule: "on-upstream-release",
+          patches: {},
+          apply_order: [],
+          slug_aliases: {},
+        },
+        null,
+        2,
+      ) + "\n",
+    );
+  }
+
+  const destDir = join(repoDir, "build");
+  const hasBuild = existsSync(join(destDir, "BUILD.md"));
+  if (hasBuild && !options.force) {
+    throw new Error(`Build for ${targetRepo} already exists. Use --force to overwrite.`);
+  }
+  mkdirSync(destDir, { recursive: true });
+
+  const filesImported: string[] = [];
+  await Bun.write(join(destDir, "BUILD.md"), buildMd);
+  filesImported.push("BUILD.md");
+  if (consume) {
+    await Bun.write(join(destDir, "CONSUME.md"), consume);
+    filesImported.push("CONSUME.md");
+  }
+  if (buildSh) {
+    await Bun.write(join(destDir, "build.sh"), buildSh);
+    try {
+      const { chmodSync } = await import("node:fs");
+      chmodSync(join(destDir, "build.sh"), 0o755);
+    } catch {}
+    filesImported.push("build.sh");
+  }
+  if (triggers) {
+    await Bun.write(join(destDir, "triggers.md"), triggers);
+    filesImported.push("triggers.md");
+  }
+
+  return {
+    patchId: buildId,
+    targetRepo,
+    author: user,
+    filesImported,
+    rederivationNeeded: false,
+    kind: "build",
   };
 }

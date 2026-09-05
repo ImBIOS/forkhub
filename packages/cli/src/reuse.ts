@@ -32,6 +32,12 @@ export async function runReuse(source: string, options: ReuseOptions = {}): Prom
   const forkhubDir = options.forkhubDir ?? join(process.cwd(), "..", ".forkhub");
 
   const imported = await runImport(source, { forkhubDir, force: options.force });
+  if (imported.kind === "build") {
+    throw new Error(
+      `Build descriptors don't re-derive (got ${imported.patchId}). ` +
+        `Use \`fh import\` for builds — \`fh reuse\` is patch-only.`,
+    );
+  }
   const derived = await runReDerive(imported.patchId, { forkhubDir });
   if (!derived.bundlePath) {
     throw new Error(`Patch ${imported.patchId} is already current. Nothing to re-derive.`);
