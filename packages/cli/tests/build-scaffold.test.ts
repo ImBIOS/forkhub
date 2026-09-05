@@ -94,15 +94,17 @@ test("workflow uses absolute paths, quoted jq fallback, https clones", () => {
   expect(yml).toContain(`jq -r '.upstream_main_branch // "main"'`);
   // git -C changes dir: patch/verify paths must be absolute
   expect(yml).toContain(`FH="$GITHUB_WORKSPACE/forkhub"`);
-  expect(yml).toContain(`git -C "$BD" apply --check "$p/reference.diff"`);
+  expect(yml).toContain(`git -C "$BD" apply --check "$CLEAN"`);
+  expect(yml).toContain(`git -C "$BD" apply "$CLEAN"`);
   // verify.sh files are checked in non-executable: -f, not -x
   expect(yml).not.toMatch(/\[ -x "\$p\/verify\.sh" \]/);
   // GHA runners have no SSH keys
   expect(yml).toContain("https://");
   // runners need Bun for verify.sh / build.sh
   expect(yml).toContain("oven-sh/setup-bun");
-  // empty reference.diff warns + skips instead of failing the build
-  expect(yml).toContain("empty reference.diff");
+  // colored/empty reference.diff heals or warn-skips instead of failing
+  expect(yml).toContain("x1b");
+  expect(yml).toContain("no usable hunks");
 });
 
 test("release tags are namespaced per target", () => {
@@ -187,4 +189,24 @@ test("search results distinguish patches from builds", () => {
   expect(out).toMatch(/kind:\s+build/);
   // reuse hint only for patches; builds go through import
   expect(out.match(/fh reuse/g)?.length ?? 0).toBe(1);
+});
+
+test("captured diffs never contain ANSI color (git-apply safe)", async () => {
+  const { diff } = await import("../src/git");
+  const repo = join(dir, "color-repo");
+  mkdirSync(repo, { recursive: true });
+  // Simulate a user with color.diff=always (the openinterpreter incident).
+  await sh(["init", "-q", "-b", "main"], repo);
+  await sh(["config", "user.email", "test@forkhub"], repo);
+  await sh(["config", "user.name", "forkhub test"], repo);
+  await sh(["config", "color.diff", "always"], repo);
+  await Bun.write(join(repo, "f.txt"), "a\n");
+  await sh(["add", "-A"], repo);
+  await sh(["commit", "-qm", "v1"], repo);
+  await Bun.write(join(repo, "f.txt"), "b\n");
+  await sh(["add", "-A"], repo);
+  await sh(["commit", "-qm", "v2"], repo);
+  const d = await diff("HEAD~1", "HEAD", repo);
+  expect(d).toContain("diff --git");
+  expect(d).not.toContain("\x1b[");
 });

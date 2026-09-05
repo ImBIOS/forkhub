@@ -111,7 +111,10 @@ export async function diff(
   ...extraArgs: string[]
 ): Promise<string> {
   if (extraArgs[0] === "--") extraArgs.shift();
-  return await gitOrThrow(["diff", `${from}..${to}`, ...extraArgs], cwd);
+  // --no-color: captured diffs are machine input (reference.diff must
+  // git-apply cleanly). Respects nothing: color escapes would corrupt them
+  // for users with color.diff=always.
+  return await gitOrThrow(["diff", "--no-color", `${from}..${to}`, ...extraArgs], cwd);
 }
 
 export async function diffNameOnly(
