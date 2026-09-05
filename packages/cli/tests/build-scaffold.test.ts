@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { runInit } from "../src/init";
 import { runImport } from "../src/import";
 import { runReuse } from "../src/reuse";
-import { targetSlug, releaseTagFor } from "../src/build-template";
+import { targetSlug, releaseTagFor, buildWorkflowYaml } from "../src/build-template";
 import { formatSearchResults } from "../src/search";
 
 let dir: string;
@@ -86,6 +86,19 @@ test("init never overwrites customized workflow or build files", async () => {
   await runInit({ target: "github.com/test/t" });
   expect(await Bun.file(buildMd).text()).toBe("CUSTOM");
   expect(await Bun.file(workflow).text()).toBe("CUSTOM-WORKFLOW");
+});
+
+test("workflow uses absolute paths, quoted jq fallback, https clones", () => {
+  const yml = buildWorkflowYaml();
+  // jq fallback must be INSIDE the program string, not trailing filenames
+  expect(yml).toContain(`jq -r '.upstream_main_branch // "main"'`);
+  // git -C changes dir: patch/verify paths must be absolute
+  expect(yml).toContain(`FH="$GITHUB_WORKSPACE/forkhub"`);
+  expect(yml).toContain(`git -C "$BD" apply --check "$p/reference.diff"`);
+  // verify.sh files are checked in non-executable: -f, not -x
+  expect(yml).not.toMatch(/\[ -x "\$p\/verify\.sh" \]/);
+  // GHA runners have no SSH keys
+  expect(yml).toContain("https://");
 });
 
 test("release tags are namespaced per target", () => {
