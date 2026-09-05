@@ -99,6 +99,10 @@ test("workflow uses absolute paths, quoted jq fallback, https clones", () => {
   expect(yml).not.toMatch(/\[ -x "\$p\/verify\.sh" \]/);
   // GHA runners have no SSH keys
   expect(yml).toContain("https://");
+  // runners need Bun for verify.sh / build.sh
+  expect(yml).toContain("oven-sh/setup-bun");
+  // empty reference.diff warns + skips instead of failing the build
+  expect(yml).toContain("empty reference.diff");
 });
 
 test("release tags are namespaced per target", () => {
