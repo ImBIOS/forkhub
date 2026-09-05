@@ -117,9 +117,11 @@ Requires [Bun](https://bun.sh) ≥ 1.3 and `git`.
 
 ```
 USERNAME/.forkhub/         # intent repository (intent = truth)
+├── .github/workflows/forkhub-build.yml  # hard-coded reusable builder (all targets)
 ├── repos/
 │   └── github.com/owner/repo/
 │       ├── manifest.json
+│       ├── build/              # convention #2: BUILD.md, build.sh, CONSUME.md, triggers.md
 │       └── patches/
 │           └── <patch-id>/
 │               ├── INTENT.md         # natural-language spec (source of truth)
@@ -136,6 +138,21 @@ USERNAME/repo/                 # your fork
 ```
 
 The core invariant: **intent is truth, diffs are evidence.** When upstream releases v2.1.0, `reference.diff` goes stale. The AI re-reads `INTENT.md` and re-realizes against the new upstream. Same intent, fresh implementation.
+
+## Building your fork release & consuming it
+
+`fh init` scaffolds a hard-coded reusable workflow (`forkhub-build.yml`) that,
+per target: clones upstream at the latest tag → applies `reference.diff` in
+`manifest.json:apply_order` → runs each `verify.sh` → runs `build/build.sh`
+(fallback: patched-source tarball, so any OSS type works) → publishes a
+**namespaced** Release `<owner>-<repo>-<upstreamTag>-fhN` (+ `SHA256SUMS`,
+`CONSUME.md` in notes). Triggers (push/schedule/manual) are the user's
+explicit choice — agents must ask, since they cost tokens/compute.
+
+Builds are discoverable like patches (`fh search` lists `BUILD.md`,
+`fh import <BUILD.md url>` reuses them; `fh reuse` stays patch-only).
+End users install artifacts per `CONSUME.md`, or track source via
+`fh update --tag <owner>-<repo>-vX.Y.Z-fhN`.
 
 ## Why this works
 

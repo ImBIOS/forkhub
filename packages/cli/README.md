@@ -19,9 +19,9 @@ AND your feature. **Now you can have both.**
 upstream/main    ─────●─────●─────●─────►  (v1.0.0, v1.1.0, v2.0.0, v2.1.0)
                                │
                                └─ your patch: --cheat flag (rejected PR)
-                                  
+
 your fork       ─────●─────●─────●─────►  (frozen at v2.0.0 + your patch)
-                                  
+
 gap: v2.1.0 features you don't have
 ```
 
@@ -87,27 +87,29 @@ forkhub watch     # daemon-side: auto-detect drift, generate bundles, apply
 
 ## Commands
 
-| Command | Purpose |
-|---|---|
-| `init` | Set up `.forkhub` repo + config |
-| `draft "<intent>"` | Create a `*` branch + draft INTENT.md |
-| `satisfied` | Finalize intent, capture diff, port to `forkhub/main`, tag |
-| `import <github-url>` | Import a patch from another user's `.forkhub` |
-| `re-derive <patch-id>` | Generate context bundle for AI re-derivation |
-| `apply <bundle-path>` | Apply realization from bundle (with verify gate) |
-| `drift-check` | Detect drift (with target_area skip for cost optimization) |
-| `watch [--once] [--interval N]` | Daemon: auto-detect drift + generate bundles + apply |
-| `update [--tag <tag>]` | Consumer: advance to latest tag |
-| `rollback` | Consumer: roll back to previous tag |
-| `status` | Show current state |
+| Command                         | Purpose                                                    |
+| ------------------------------- | ---------------------------------------------------------- |
+| `init`                          | Set up `.forkhub` repo + config                            |
+| `draft "<intent>"`              | Create a `*` branch + draft INTENT.md                      |
+| `satisfied`                     | Finalize intent, capture diff, port to `forkhub/main`, tag |
+| `import <github-url>`           | Import a patch from another user's `.forkhub`              |
+| `re-derive <patch-id>`          | Generate context bundle for AI re-derivation               |
+| `apply <bundle-path>`           | Apply realization from bundle (with verify gate)           |
+| `drift-check`                   | Detect drift (with target_area skip for cost optimization) |
+| `watch [--once] [--interval N]` | Daemon: auto-detect drift + generate bundles + apply       |
+| `update [--tag <tag>]`          | Consumer: advance to latest tag                            |
+| `rollback`                      | Consumer: roll back to previous tag                        |
+| `status`                        | Show current state                                         |
 
 ## How it works
 
 ```
 USERNAME/.forkhub/         # intent repository (intent = truth)
+├── .github/workflows/forkhub-build.yml  # hard-coded reusable builder (all targets)
 ├── repos/
 │   └── github.com/owner/repo/
 │       ├── manifest.json
+│       ├── build/              # BUILD.md, build.sh, CONSUME.md, triggers.md
 │       └── patches/
 │           └── <patch-id>/
 │               ├── INTENT.md         # natural language intent
@@ -126,6 +128,17 @@ USER/repo/                       # your fork
 The core invariant: **intent is truth, diffs are evidence.** When upstream
 releases v2.1.0, the reference.diff goes stale. The AI re-reads INTENT.md and
 re-realizes against new upstream. Same intent, fresh implementation.
+
+## Building your fork release & consuming it
+
+`fh init` scaffolds a hard-coded reusable workflow (`forkhub-build.yml`) that,
+per target: clones upstream at the latest tag → applies `reference.diff` in
+`manifest.json:apply_order` → runs each `verify.sh` → runs `build/build.sh`
+(fallback: patched-source tarball, so any OSS type works) → publishes a
+**namespaced** Release `<owner>-<repo>-<upstreamTag>-fhN` (+ `SHA256SUMS`,
+`CONSUME.md` in notes). Triggers are the user's explicit choice — agents must
+ask, since they cost tokens/compute. Builds are discoverable like patches
+(`fh search` lists `BUILD.md`, `fh import` reuses them).
 
 ## Why this works
 
@@ -158,6 +171,7 @@ forkhub watch --interval 300  # check every 5 minutes
 ```
 
 Loops:
+
 1. Detect drift (per-patch target_area check, skip if untouched)
 2. Generate context bundle for drifted patches
 3. Wait for AI to produce REALIZATION/realization.diff

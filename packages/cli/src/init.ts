@@ -181,6 +181,12 @@ export async function runInit(options: InitOptions = {}): Promise<InitResult> {
     );
   }
 
+  // Convention #2/#3: hard-coded reusable build workflow + per-target
+  // build descriptors (BUILD.md / build.sh / CONSUME.md / triggers.md).
+  // Idempotent — never overwrites user customizations.
+  const { scaffoldBuildFiles } = await import("./build-template");
+  scaffoldBuildFiles(forkhubDir, targetRepo);
+
   return {
     targetRepo,
     forkhubDir,

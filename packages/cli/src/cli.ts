@@ -34,7 +34,7 @@ Usage:
   fh pr [--draft] [--base <branch>]      Push current branch + open PR to upstream
   fh link-pr <patch-id|branch> <pr#|url> Link an existing upstream PR to a patch
   fh publish [--message <msg>] [--allow-missing-pr]  Push .forkhub repo (requires open issue+PR by default)
-  fh import <url> [--force]              Import a patch from another user's .forkhub
+  fh import <url> [--force]              Import a patch (INTENT.md) or build (BUILD.md) from another .forkhub
   fh reuse <url> [--agent <name>]         Import + build re-derivation bundle in one step
   fh search [query] [--target <repo>] [--author <user>] [--sort stars]
                                          Search GitHub for patches (★ = publisher repo stars)
@@ -145,6 +145,10 @@ async function main() {
         console.log(`.forkhub:    ${result.forkhubDir}`);
         console.log(
           result.created ? "Created new .forkhub repo." : "Existing .forkhub repo configured.",
+        );
+        console.log(`Build CI:   .github/workflows/forkhub-build.yml (reusable, all targets)`);
+        console.log(
+          `Descriptors: repos/<host>/<owner>/<repo>/build/ (BUILD.md, build.sh, CONSUME.md, triggers.md)`,
         );
         break;
       }
@@ -322,11 +326,18 @@ async function main() {
         if (opts.force === true) importOpts.force = true;
 
         const result = await runImport(source, importOpts);
-        console.log(`Patch ID:     ${result.patchId}`);
-        console.log(`Target repo:  ${result.targetRepo}`);
-        console.log(`Author:       ${result.author}`);
-        console.log(`Files:        ${result.filesImported.join(", ")}`);
-        console.log(`\nPatch imported. Run \`fh drift-check\` to see if re-derivation is needed.`);
+        console.log(`ID:          ${result.patchId} (${result.kind})`);
+        console.log(`Target repo: ${result.targetRepo}`);
+        console.log(`Author:      ${result.author}`);
+        console.log(`Files:       ${result.filesImported.join(", ")}`);
+        if (result.kind === "build") {
+          console.log(`\nBuild descriptors imported. Ask the user about triggers,`);
+          console.log(`fill build.sh, and push — forkhub-build.yml does the rest.`);
+        } else {
+          console.log(
+            `\nPatch imported. Run \`fh drift-check\` to see if re-derivation is needed.`,
+          );
+        }
         break;
       }
 

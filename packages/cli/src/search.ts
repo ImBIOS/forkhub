@@ -7,6 +7,8 @@ export type SearchResult = {
   patchId: string;
   title: string;
   targetRepo: string | null;
+  // "patch" = patches/INTENT.md, "build" = build/BUILD.md (convention #2, reusable).
+  kind: "patch" | "build";
   /** Stars on the publisher's `.forkhub` repo — popularity proxy. Null when unknown. */
   stars: number | null;
 };
@@ -27,7 +29,14 @@ type Candidate = {
   path: string;
   url: string;
   stars: number | null;
+  kind: "patch" | "build";
 };
+
+function classifyTreeEntry(path: string): "patch" | "build" | null {
+  if (path.includes("/patches/") && path.endsWith("/INTENT.md")) return "patch";
+  if (path.includes("/build/") && path.endsWith("/BUILD.md")) return "build";
+  return null;
+}
 
 const RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504]);
 const MAX_ATTEMPTS = 4;
@@ -98,17 +107,32 @@ async function fetchIntentMeta(
   repo: string,
   branch: string,
   path: string,
-): Promise<{ patchId: string; title: string; targetRepo: string | null }> {
+): Promise<{ patchId: string; title: string; targetRepo: string | null; kind: "patch" | "build" }> {
+  const kind = classifyTreeEntry(path) ?? "patch";
   try {
     const rawUrl = `https://raw.githubusercontent.com/${user}/${repo}/${branch}/${path}`;
     const response = await fetch(rawUrl);
     if (!response.ok)
       return {
-        patchId: path.split("/").pop()?.replace("/INTENT.md", "") ?? "unknown",
+        patchId:
+          kind === "build" ? path : (path.split("/").pop()?.replace("/INTENT.md", "") ?? "unknown"),
         title: "unknown",
         targetRepo: null,
+        kind,
       };
     const content = await response.text();
+    if (kind === "build") {
+      const { targetSlug } = await import("./build-template");
+      const targetMatch = content.match(/^target_repo:\s*(.+)$/m);
+      const target = targetMatch?.[1]?.trim() ?? null;
+      const heading = content.match(/^#\s+(.+)$/m)?.[1]?.trim() ?? "build";
+      return {
+        patchId: target ? `build:${targetSlug(target)}` : path,
+        title: target ? `${heading} (${target})` : heading,
+        targetRepo: target,
+        kind,
+      };
+    }
     const idMatch = content.match(/^id:\s*(.+)$/m);
     const titleMatch = content.match(/^title:\s*(.+)$/m);
     const targetMatch = content.match(/^target_repo:\s*(.+)$/m);
@@ -117,9 +141,10 @@ async function fetchIntentMeta(
         idMatch?.[1]?.trim() ?? path.split("/").pop()?.replace("/INTENT.md", "") ?? "unknown",
       title: titleMatch?.[1]?.trim() ?? "unknown",
       targetRepo: targetMatch?.[1]?.trim() ?? null,
+      kind,
     };
   } catch {
-    return { patchId: "unknown", title: "unknown", targetRepo: null };
+    return { patchId: "unknown", title: "unknown", targetRepo: null, kind };
   }
 }
 
@@ -146,20 +171,18 @@ async function searchByAuthor(author: string, options: SearchOptions): Promise<S
 
   const pushTreeEntries = (tree: any, branch: string, stars: number | null) => {
     for (const entry of tree.tree ?? []) {
-      if (
-        entry.type === "blob" &&
-        entry.path.includes("/patches/") &&
-        entry.path.endsWith("/INTENT.md")
-      ) {
-        candidates.push({
-          user: author,
-          repo: ".forkhub",
-          branch,
-          path: entry.path,
-          url: `https://github.com/${author}/.forkhub/blob/${branch}/${entry.path}`,
-          stars,
-        });
-      }
+      if (entry.type !== "blob" || typeof entry.path !== "string") continue;
+      const kind = classifyTreeEntry(entry.path);
+      if (!kind) continue;
+      candidates.push({
+        user: author,
+        repo: ".forkhub",
+        branch,
+        path: entry.path,
+        url: `https://github.com/${author}/.forkhub/blob/${branch}/${entry.path}`,
+        stars,
+        kind,
+      });
     }
   };
 
@@ -182,20 +205,18 @@ async function searchByAuthor(author: string, options: SearchOptions): Promise<S
           `/repos/${author}/.forkhub/git/trees/${r.default_branch}?recursive=1`,
         );
         for (const entry of tree.tree) {
-          if (
-            entry.type === "blob" &&
-            entry.path.includes("/patches/") &&
-            entry.path.endsWith("/INTENT.md")
-          ) {
-            candidates.push({
-              user: author,
-              repo: ".forkhub",
-              branch: r.default_branch,
-              path: entry.path,
-              url: `https://github.com/${author}/.forkhub/blob/${r.default_branch}/${entry.path}`,
-              stars: typeof r.stargazers_count === "number" ? r.stargazers_count : null,
-            });
-          }
+          if (entry?.type !== "blob" || typeof entry.path !== "string") continue;
+          const kind = classifyTreeEntry(entry.path);
+          if (!kind) continue;
+          candidates.push({
+            user: author,
+            repo: ".forkhub",
+            branch: r.default_branch,
+            path: entry.path,
+            url: `https://github.com/${author}/.forkhub/blob/${r.default_branch}/${entry.path}`,
+            stars: typeof r.stargazers_count === "number" ? r.stargazers_count : null,
+            kind,
+          });
         }
       } catch {}
     }
@@ -220,21 +241,19 @@ async function searchByTargetRepo(
         `/repos/${r.full_name}/git/trees/${r.default_branch}?recursive=1`,
       );
       for (const entry of tree.tree) {
-        if (
-          entry.type === "blob" &&
-          entry.path.includes("/patches/") &&
-          entry.path.endsWith("/INTENT.md")
-        ) {
-          const [user, repo] = r.full_name.split("/");
-          candidates.push({
-            user,
-            repo,
-            branch: r.default_branch,
-            path: entry.path,
-            url: `https://github.com/${r.full_name}/blob/${r.default_branch}/${entry.path}`,
-            stars,
-          });
-        }
+        if (entry?.type !== "blob" || typeof entry.path !== "string") continue;
+        const kind = classifyTreeEntry(entry.path);
+        if (!kind) continue;
+        const [user, repo] = r.full_name.split("/");
+        candidates.push({
+          user,
+          repo,
+          branch: r.default_branch,
+          path: entry.path,
+          url: `https://github.com/${r.full_name}/blob/${r.default_branch}/${entry.path}`,
+          stars,
+          kind,
+        });
       }
     } catch {}
   }
@@ -269,15 +288,16 @@ export function formatSearchResults(results: SearchResult[]): string {
   if (results.length === 0) {
     return "No patches found.\n";
   }
-  const lines: string[] = [`Found ${results.length} patch(es):\n`];
+  const lines: string[] = [`Found ${results.length} result(s):\n`];
   for (const r of results) {
     lines.push(`  ${r.patchId}`);
+    lines.push(`    kind:       ${r.kind}`);
     lines.push(`    title:      ${r.title}`);
     lines.push(`    author:     ${r.user}`);
     if (r.targetRepo) lines.push(`    target:     ${r.targetRepo}`);
     lines.push(`    stars:      ${r.stars ?? "?"}`);
     lines.push(`    import:     forkhub import ${r.url}`);
-    lines.push(`    reuse:      fh reuse ${r.url}`);
+    if (r.kind === "patch") lines.push(`    reuse:      fh reuse ${r.url}`);
     lines.push("");
   }
   return lines.join("\n");
